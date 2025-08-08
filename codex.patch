@@ -1,0 +1,1079 @@
+diff --git a/lib/models/plant.dart b/lib/models/plant.dart
+index 52c7b90fc48ac77d4366e5e28876ed53d895dcfa..eb17f5edbf095a0eddd6d94165011b3a49c81d92 100644
+--- a/lib/models/plant.dart
++++ b/lib/models/plant.dart
+@@ -1,41 +1,73 @@
+ import 'package:flutter/material.dart';
+ 
++import 'reading.dart';
++
+ class Plant {
+   final String id;
+   final String name;
+-  final String siteUrl;
+-  final Color theme; // ここを Color に
+-  final double latestKw;
+-  final double todayMaxKw;
+-  final DateTime updatedAt;
++  final String url;
++  final String username;
++  final String password;
++  final Color themeColor;
++  final String icon;
++  final List<Reading> readings;
+ 
+-  const Plant({
++  Plant({
+     required this.id,
+     required this.name,
+-    required this.siteUrl,
+-    required this.theme,
+-    required this.latestKw,
+-    required this.todayMaxKw,
+-    required this.updatedAt,
++    required this.url,
++    required this.username,
++    required this.password,
++    required this.themeColor,
++    required this.icon,
++    required this.readings,
+   });
+ 
+   Plant copyWith({
+     String? id,
+     String? name,
+-    String? siteUrl,
+-    Color? theme,
+-    double? latestKw,
+-    double? todayMaxKw,
+-    DateTime? updatedAt,
++    String? url,
++    String? username,
++    String? password,
++    Color? themeColor,
++    String? icon,
++    List<Reading>? readings,
+   }) {
+     return Plant(
+       id: id ?? this.id,
+       name: name ?? this.name,
+-      siteUrl: siteUrl ?? this.siteUrl,
+-      theme: theme ?? this.theme,
+-      latestKw: latestKw ?? this.latestKw,
+-      todayMaxKw: todayMaxKw ?? this.todayMaxKw,
+-      updatedAt: updatedAt ?? this.updatedAt,
++      url: url ?? this.url,
++      username: username ?? this.username,
++      password: password ?? this.password,
++      themeColor: themeColor ?? this.themeColor,
++      icon: icon ?? this.icon,
++      readings: readings ?? this.readings,
++    );
++  }
++
++  factory Plant.fromJson(Map<String, dynamic> json) {
++    return Plant(
++      id: json['id'] as String,
++      name: json['name'] as String,
++      url: json['url'] as String,
++      username: json['username'] as String,
++      password: json['password'] as String,
++      themeColor: Color(json['themeColor'] as int),
++      icon: json['icon'] as String,
++      readings: (json['readings'] as List<dynamic>)
++          .map((e) => Reading.fromJson(e as Map<String, dynamic>))
++          .toList(),
+     );
+   }
++
++  Map<String, dynamic> toJson() => {
++        'id': id,
++        'name': name,
++        'url': url,
++        'username': username,
++        'password': password,
++        'themeColor': themeColor.value,
++        'icon': icon,
++        'readings': readings.map((r) => r.toJson()).toList(),
++      };
+ }
+diff --git a/lib/models/reading.dart b/lib/models/reading.dart
+index ff50b7c6a0bc0ed09bc29a4d6cf04cf8738e1f51..ee25d30100d06f8e565814c4363093addc0b4eda 100644
+--- a/lib/models/reading.dart
++++ b/lib/models/reading.dart
+@@ -1,7 +1,20 @@
++import 'dart:convert';
++
+ class Reading {
+-  final DateTime ts; // 計測時刻
+-  final double kw; // 発電量
+-  final double? dayMax; // その時点での当日最高
++  final DateTime timestamp;
++  final double power;
++
++  Reading({required this.timestamp, required this.power});
++
++  factory Reading.fromJson(Map<String, dynamic> json) {
++    return Reading(
++      timestamp: DateTime.parse(json['timestamp'] as String),
++      power: (json['power'] as num).toDouble(),
++    );
++  }
+ 
+-  Reading({required this.ts, required this.kw, this.dayMax});
++  Map<String, dynamic> toJson() => {
++        'timestamp': timestamp.toIso8601String(),
++        'power': power,
++      };
+ }
+diff --git a/lib/providers/plants_provider.dart b/lib/providers/plants_provider.dart
+index ff4ff2ddbb03daf371aa7240271bfc6f3b806e10..b36de793b444327d974f453d9b2d0064ebe3147f 100644
+--- a/lib/providers/plants_provider.dart
++++ b/lib/providers/plants_provider.dart
+@@ -1,32 +1,50 @@
+-// 追加時
+-void add({ required String name, required String siteUrl, Color theme = const Color(0xFF1E88E5), }) {
+-  final now = DateTime.now();
+-  final r = Random();
+-  final latest = 100 + r.nextInt(300);
+-  final maxToday = latest + r.nextInt(120);
+-  final p = Plant(
+-    id: DateTime.now().millisecondsSinceEpoch.toString(),
+-    name: name,
+-    siteUrl: siteUrl,
+-    theme: theme,                 // ← ここを Color のまま
+-    latestKw: latest.toDouble(),
+-    todayMaxKw: maxToday.toDouble(),
+-    updatedAt: now,
+-  );
+-  state = [...state, p];
+-}
++import 'dart:math';
++
++import 'package:flutter/material.dart';
++import 'package:flutter_riverpod/flutter_riverpod.dart';
+ 
+-// モック
+-return List.generate(6, (i) {
+-  final latest = 120 + rnd.nextInt(220);
+-  final maxToday = latest + rnd.nextInt(120);
+-  return Plant(
+-    id: 'plant_$i',
+-    name: 'Plant ${i + 1}',
+-    siteUrl: 'https://example.com/plant/${i + 1}',
+-    theme: colors[i % colors.length],   // ← 文字列ではなく Color
+-    latestKw: latest.toDouble(),
+-    todayMaxKw: maxToday.toDouble(),
+-    updatedAt: now.subtract(Duration(minutes: rnd.nextInt(120))),
+-  );
++import '../models/plant.dart';
++import '../models/reading.dart';
++
++final plantsProvider = StateNotifierProvider<PlantsNotifier, List<Plant>>((ref) {
++  return PlantsNotifier()..loadMock();
+ });
++
++class PlantsNotifier extends StateNotifier<List<Plant>> {
++  PlantsNotifier() : super([]);
++
++  void loadMock() {
++    final now = DateTime.now();
++    state = List.generate(3, (i) {
++      final rnd = Random(i);
++      final readings = List.generate(7, (d) {
++        return Reading(
++          timestamp: now.subtract(Duration(days: 6 - d)),
++          power: 50 + rnd.nextInt(100).toDouble(),
++        );
++      });
++      return Plant(
++        id: 'plant_$i',
++        name: 'Plant ${i + 1}',
++        url: 'https://example.com/plant${i + 1}',
++        username: 'user',
++        password: 'pass',
++        themeColor: Colors.primaries[i % Colors.primaries.length],
++        icon: Icons.solar_power.codePoint.toString(),
++        readings: readings,
++      );
++    });
++  }
++
++  void addPlant(Plant plant) {
++    state = [...state, plant];
++  }
++
++  Plant? getById(String id) {
++    try {
++      return state.firstWhere((p) => p.id == id);
++    } catch (_) {
++      return null;
++    }
++  }
++}
+diff --git a/lib/router.dart b/lib/router.dart
+index eb91456f310f32611e7b8afa1bee5b33df8ab240..b860efd6cbbe7fea92b01c7663393b2389c31c8e 100644
+--- a/lib/router.dart
++++ b/lib/router.dart
+@@ -1,28 +1,39 @@
+-// lib/router.dart
+-import 'package:flutter/material.dart';
+ import 'package:go_router/go_router.dart';
++import 'package:flutter/material.dart';
+ 
+ import 'screens/dashboard_screen.dart';
+ import 'screens/plant_add_screen.dart';
+ import 'screens/plant_detail_screen.dart';
+ import 'screens/stats_screen.dart';
+-import 'screens/notification_settings_screen.dart';
++import 'screens/notification_setting_screen.dart';
+ 
+ final router = GoRouter(
+   routes: [
+-    GoRoute(path: '/', builder: (context, state) => const DashboardScreen()),
++    GoRoute(
++      path: '/',
++      name: 'dashboard',
++      builder: (context, state) => const DashboardScreen(),
++    ),
+     GoRoute(
+       path: '/plant/add',
++      name: 'addPlant',
+       builder: (context, state) => const PlantAddScreen(),
+     ),
+     GoRoute(
+       path: '/plant/:id',
+-      builder: (context, state) => PlantDetailScreen(id: state.params['id']!),
++      name: 'plantDetail',
++      builder: (context, state) =>
++          PlantDetailScreen(plantId: state.pathParameters['id']!),
++    ),
++    GoRoute(
++      path: '/stats',
++      name: 'stats',
++      builder: (context, state) => const StatsScreen(),
+     ),
+-    GoRoute(path: '/stats', builder: (context, state) => const StatsScreen()),
+     GoRoute(
+-      path: '/settings/notifications',
+-      builder: (context, state) => const NotificationSettingsScreen(),
++      path: '/notifications',
++      name: 'notifications',
++      builder: (context, state) => const NotificationSettingScreen(),
+     ),
+   ],
+ );
+diff --git a/lib/screens/dashboard_screen.dart b/lib/screens/dashboard_screen.dart
+index 5a6e81ac89918f4ca83026dcd9969d62f5599c22..5d21bcf9ed98559a1c4a60838340b72334e7dcde 100644
+--- a/lib/screens/dashboard_screen.dart
++++ b/lib/screens/dashboard_screen.dart
+@@ -1,200 +1,162 @@
+ import 'package:flutter/material.dart';
+ import 'package:flutter_riverpod/flutter_riverpod.dart';
+ import 'package:go_router/go_router.dart';
+-import '../providers/plants_provider.dart';
++
+ import '../models/plant.dart';
++import '../providers/plants_provider.dart';
++
++enum DashboardView { carousel, grid, list }
+ 
+-class DashboardScreen extends ConsumerWidget {
++class DashboardScreen extends ConsumerStatefulWidget {
+   const DashboardScreen({super.key});
+ 
+   @override
+-  Widget build(BuildContext context, WidgetRef ref) {
++  ConsumerState<DashboardScreen> createState() => _DashboardScreenState();
++}
++
++class _DashboardScreenState extends ConsumerState<DashboardScreen> {
++  DashboardView view = DashboardView.carousel;
++
++  @override
++  Widget build(BuildContext context) {
+     final plants = ref.watch(plantsProvider);
+-    final mode = ref.watch(displayModeProvider);
++    Widget body;
++    switch (view) {
++      case DashboardView.carousel:
++        body = PageView.builder(
++          itemCount: plants.length,
++          itemBuilder: (context, index) => _PlantCardLarge(plant: plants[index]),
++        );
++        break;
++      case DashboardView.grid:
++        body = GridView.count(
++          padding: const EdgeInsets.all(12),
++          crossAxisCount: 2,
++          mainAxisSpacing: 12,
++          crossAxisSpacing: 12,
++          children: plants.map((p) => _PlantCardSmall(plant: p)).toList(),
++        );
++        break;
++      case DashboardView.list:
++        body = ListView.separated(
++          padding: const EdgeInsets.all(12),
++          itemCount: plants.length,
++          separatorBuilder: (_, __) => const SizedBox(height: 8),
++          itemBuilder: (_, i) => _PlantTile(plant: plants[i]),
++        );
++        break;
++    }
+ 
+     return Scaffold(
+       appBar: AppBar(
+-        title: const Text('発電所一覧'),
++        title: const Text('Dashboard'),
+         actions: [
+-          PopupMenuButton<DisplayMode>(
++          PopupMenuButton<DashboardView>(
+             icon: const Icon(Icons.view_module),
+-            onSelected: (m) => ref.read(displayModeProvider.notifier).state = m,
+-            itemBuilder:
+-                (c) => const [
+-                  PopupMenuItem(
+-                    value: DisplayMode.carousel,
+-                    child: Text('カルーセル'),
+-                  ),
+-                  PopupMenuItem(value: DisplayMode.grid, child: Text('グリッド')),
+-                  PopupMenuItem(value: DisplayMode.list, child: Text('リスト')),
+-                  PopupMenuItem(value: DisplayMode.auto, child: Text('自動')),
+-                ],
+-          ),
++            initialValue: view,
++            onSelected: (v) => setState(() => view = v),
++            itemBuilder: (_) => const [
++              PopupMenuItem(
++                value: DashboardView.carousel,
++                child: Text('Carousel'),
++              ),
++              PopupMenuItem(
++                value: DashboardView.grid,
++                child: Text('Grid'),
++              ),
++              PopupMenuItem(
++                value: DashboardView.list,
++                child: Text('List'),
++              ),
++            ],
++          )
+         ],
+       ),
+-      body: _buildBody(context, plants, mode, ref),
++      body: plants.isEmpty
++          ? const Center(child: Text('No plants'))
++          : body,
+       floatingActionButton: FloatingActionButton(
+-        onPressed: () => context.push('/plant/add'),
++        onPressed: () => context.pushNamed('addPlant'),
+         child: const Icon(Icons.add),
+       ),
+     );
+   }
+-
+-  Widget _buildBody(
+-    BuildContext context,
+-    List<Plant> plants,
+-    DisplayMode mode,
+-    WidgetRef ref,
+-  ) {
+-    final resolved = _resolveMode(mode, plants.length);
+-    switch (resolved) {
+-      case DisplayMode.carousel:
+-        return PageView.builder(
+-          itemCount: plants.length,
+-          itemBuilder: (_, i) => _PlantBigCard(plant: plants[i]),
+-        );
+-      case DisplayMode.grid:
+-        return Padding(
+-          padding: const EdgeInsets.all(12),
+-          child: GridView.count(
+-            crossAxisCount: 2,
+-            mainAxisSpacing: 12,
+-            crossAxisSpacing: 12,
+-            children: [for (final p in plants) _PlantSmallCard(plant: p)],
+-          ),
+-        );
+-      case DisplayMode.list:
+-        return ListView.separated(
+-          padding: const EdgeInsets.all(12),
+-          itemCount: plants.length,
+-          separatorBuilder: (_, __) => const SizedBox(height: 8),
+-          itemBuilder: (_, i) => _PlantListTile(plant: plants[i]),
+-        );
+-      case DisplayMode.auto:
+-        // 8拠点まではカルーセル、20までグリッド、それ以上はリスト
+-        final autoMode =
+-            plants.length <= 8
+-                ? DisplayMode.carousel
+-                : plants.length <= 20
+-                ? DisplayMode.grid
+-                : DisplayMode.list;
+-        return _buildBody(context, plants, autoMode, ref);
+-    }
+-  }
+ }
+ 
+-DisplayMode _resolveMode(DisplayMode m, int count) => m; // ここは上でautoを解決済み
+-
+-class _PlantBigCard extends StatelessWidget {
+-  const _PlantBigCard({required this.plant});
++class _PlantCardLarge extends StatelessWidget {
++  const _PlantCardLarge({required this.plant});
+   final Plant plant;
+ 
+   @override
+   Widget build(BuildContext context) {
++    final latest =
++        plant.readings.isNotEmpty ? plant.readings.last.power : 0.0;
+     return Padding(
+       padding: const EdgeInsets.all(16),
+-      child: InkWell(
+-        onTap: () => context.push('/plant/${plant.id}'),
+-        child: Card(
+-          elevation: 1,
+-          shape: RoundedRectangleBorder(
+-            borderRadius: BorderRadius.circular(16),
+-          ),
+-          child: Padding(
+-            padding: const EdgeInsets.all(20),
++      child: Card(
++        color: plant.themeColor.withOpacity(.1),
++        child: InkWell(
++          onTap: () => context.pushNamed('plantDetail', pathParameters: {'id': plant.id}),
++          child: Center(
+             child: Column(
+-              mainAxisAlignment: MainAxisAlignment.center,
++              mainAxisSize: MainAxisSize.min,
+               children: [
+-                Text(
+-                  plant.name,
+-                  style: const TextStyle(
+-                    fontSize: 22,
+-                    fontWeight: FontWeight.bold,
+-                  ),
+-                ),
+-                const SizedBox(height: 16),
+-                Text(
+-                  '現在 ${plant.latestKw.toStringAsFixed(0)} kW',
+-                  style: const TextStyle(fontSize: 28),
+-                ),
+-                const SizedBox(height: 8),
+-                Text('今日の最高 ${plant.todayMaxKw.toStringAsFixed(0)} kW'),
+-                const SizedBox(height: 8),
+-                Text(
+-                  '更新: ${_fmtTime(plant.updatedAt)}',
+-                  style: TextStyle(color: Colors.grey[600]),
+-                ),
++                Text(plant.name,
++                    style: Theme.of(context).textTheme.headlineSmall),
++                const SizedBox(height: 12),
++                Text('${latest.toStringAsFixed(1)} kW',
++                    style: Theme.of(context).textTheme.displaySmall),
+               ],
+             ),
+           ),
+         ),
+       ),
+     );
+   }
+ }
+ 
+-class _PlantSmallCard extends StatelessWidget {
+-  const _PlantSmallCard({required this.plant});
++class _PlantCardSmall extends StatelessWidget {
++  const _PlantCardSmall({required this.plant});
+   final Plant plant;
+ 
+   @override
+   Widget build(BuildContext context) {
+-    return InkWell(
+-      onTap: () => context.push('/plant/${plant.id}'),
+-      child: Card(
+-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
++    final latest =
++        plant.readings.isNotEmpty ? plant.readings.last.power : 0.0;
++    return Card(
++      child: InkWell(
++        onTap: () => context.pushNamed('plantDetail', pathParameters: {'id': plant.id}),
+         child: Padding(
+-          padding: const EdgeInsets.all(16),
++          padding: const EdgeInsets.all(12),
+           child: Column(
+-            crossAxisAlignment: CrossAxisAlignment.start,
+             mainAxisAlignment: MainAxisAlignment.center,
+             children: [
+-              Text(
+-                plant.name,
+-                style: const TextStyle(fontWeight: FontWeight.w600),
+-              ),
++              Text(plant.name, style: const TextStyle(fontWeight: FontWeight.bold)),
+               const SizedBox(height: 8),
+-              Text(
+-                '${plant.latestKw.toStringAsFixed(0)} kW',
+-                style: const TextStyle(fontSize: 20),
+-              ),
+-              const SizedBox(height: 4),
+-              Text(
+-                'Max ${plant.todayMaxKw.toStringAsFixed(0)} kW',
+-                style: TextStyle(color: Colors.grey[600]),
+-              ),
++              Text('${latest.toStringAsFixed(1)} kW',
++                  style: const TextStyle(fontSize: 20)),
+             ],
+           ),
+         ),
+       ),
+     );
+   }
+ }
+ 
+-class _PlantListTile extends StatelessWidget {
+-  const _PlantListTile({required this.plant});
++class _PlantTile extends StatelessWidget {
++  const _PlantTile({required this.plant});
+   final Plant plant;
+ 
+   @override
+   Widget build(BuildContext context) {
++    final latest =
++        plant.readings.isNotEmpty ? plant.readings.last.power : 0.0;
+     return ListTile(
+-      onTap: () => context.push('/plant/${plant.id}'),
+-      tileColor: Theme.of(context).colorScheme.surface,
+       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+-      title: Text(
+-        plant.name,
+-        style: const TextStyle(fontWeight: FontWeight.w600),
+-      ),
+-      subtitle: Text(
+-        'Max ${plant.todayMaxKw.toStringAsFixed(0)} kW・更新 ${_fmtTime(plant.updatedAt)}',
+-      ),
+-      trailing: Text(
+-        '${plant.latestKw.toStringAsFixed(0)} kW',
+-        style: const TextStyle(fontSize: 18),
+-      ),
++      tileColor: Theme.of(context).colorScheme.surface,
++      onTap: () => context.pushNamed('plantDetail', pathParameters: {'id': plant.id}),
++      title: Text(plant.name),
++      trailing: Text('${latest.toStringAsFixed(1)} kW'),
+     );
+   }
+ }
+-
+-String _fmtTime(DateTime t) =>
+-    '${t.hour.toString().padLeft(2, '0')}:${t.minute.toString().padLeft(2, '0')}';
+diff --git a/lib/screens/notification_setting_screen.dart b/lib/screens/notification_setting_screen.dart
+new file mode 100644
+index 0000000000000000000000000000000000000000..33dad826184eddf260a98db78810257245e4aa35
+--- /dev/null
++++ b/lib/screens/notification_setting_screen.dart
+@@ -0,0 +1,70 @@
++import 'package:flutter/material.dart';
++
++class NotificationSettingScreen extends StatefulWidget {
++  const NotificationSettingScreen({super.key});
++
++  @override
++  State<NotificationSettingScreen> createState() => _NotificationSettingScreenState();
++}
++
++class _NotificationSettingScreenState extends State<NotificationSettingScreen> {
++  bool dailySummary = false;
++  List<TimeOfDay> summaryTimes = [];
++  bool abnormalAlert = false;
++  double threshold = 0;
++  bool maxUpdate = false;
++
++  @override
++  Widget build(BuildContext context) {
++    return Scaffold(
++      appBar: AppBar(title: const Text('Notifications')),
++      body: ListView(
++        padding: const EdgeInsets.all(16),
++        children: [
++          SwitchListTile(
++            title: const Text('Daily summary'),
++            value: dailySummary,
++            onChanged: (v) => setState(() => dailySummary = v),
++          ),
++          if (dailySummary)
++            Column(
++              children: [
++                for (var t in summaryTimes)
++                  ListTile(
++                    title: Text(t.format(context)),
++                  ),
++                TextButton(
++                  onPressed: () async {
++                    final now = TimeOfDay.now();
++                    final picked = await showTimePicker(context: context, initialTime: now);
++                    if (picked != null) {
++                      setState(() => summaryTimes.add(picked));
++                    }
++                  },
++                  child: const Text('Add time'),
++                ),
++              ],
++            ),
++          const Divider(),
++          SwitchListTile(
++            title: const Text('Abnormal output alert'),
++            value: abnormalAlert,
++            onChanged: (v) => setState(() => abnormalAlert = v),
++          ),
++          if (abnormalAlert)
++            TextField(
++              keyboardType: TextInputType.number,
++              decoration: const InputDecoration(labelText: 'Threshold kW'),
++              onChanged: (v) => threshold = double.tryParse(v) ?? 0,
++            ),
++          const Divider(),
++          SwitchListTile(
++            title: const Text('All-time max update'),
++            value: maxUpdate,
++            onChanged: (v) => setState(() => maxUpdate = v),
++          ),
++        ],
++      ),
++    );
++  }
++}
+diff --git a/lib/screens/notification_settings_screen.dart b/lib/screens/notification_settings_screen.dart
+deleted file mode 100644
+index e69de29bb2d1d6434b8b29ae775ad8c2e48c5391..0000000000000000000000000000000000000000
+diff --git a/lib/screens/plant_add_screen.dart b/lib/screens/plant_add_screen.dart
+index e69de29bb2d1d6434b8b29ae775ad8c2e48c5391..2e4970327fce333f5d4888a6470b5d6c1fac601b 100644
+--- a/lib/screens/plant_add_screen.dart
++++ b/lib/screens/plant_add_screen.dart
+@@ -0,0 +1,142 @@
++import 'package:flutter/material.dart';
++import 'package:flutter_riverpod/flutter_riverpod.dart';
++import 'package:go_router/go_router.dart';
++
++import '../models/plant.dart';
++import '../models/reading.dart';
++import '../providers/plants_provider.dart';
++
++class PlantAddScreen extends ConsumerStatefulWidget {
++  const PlantAddScreen({super.key});
++
++  @override
++  ConsumerState<PlantAddScreen> createState() => _PlantAddScreenState();
++}
++
++class _PlantAddScreenState extends ConsumerState<PlantAddScreen> {
++  int _step = 0;
++  final _urlCtrl = TextEditingController();
++  final _userCtrl = TextEditingController();
++  final _passCtrl = TextEditingController();
++  final _nameCtrl = TextEditingController();
++  Color _color = Colors.green;
++  IconData _icon = Icons.solar_power;
++
++  @override
++  Widget build(BuildContext context) {
++    return Scaffold(
++      appBar: AppBar(title: const Text('Add Plant')),
++      body: Stepper(
++        currentStep: _step,
++        onStepContinue: () {
++          if (_step < 2) {
++            setState(() => _step++);
++          } else {
++            _save();
++          }
++        },
++        onStepCancel: () {
++          if (_step > 0) setState(() => _step--);
++        },
++        steps: [
++          Step(
++            title: const Text('Plant URL'),
++            content: TextField(
++              controller: _urlCtrl,
++              decoration: const InputDecoration(labelText: 'URL'),
++            ),
++          ),
++          Step(
++            title: const Text('Credentials'),
++            content: Column(
++              children: [
++                TextField(
++                  controller: _userCtrl,
++                  decoration: const InputDecoration(labelText: 'Username'),
++                ),
++                TextField(
++                  controller: _passCtrl,
++                  decoration: const InputDecoration(labelText: 'Password'),
++                  obscureText: true,
++                ),
++              ],
++            ),
++          ),
++          Step(
++            title: const Text('Details'),
++            content: Column(
++              crossAxisAlignment: CrossAxisAlignment.start,
++              children: [
++                TextField(
++                  controller: _nameCtrl,
++                  decoration: const InputDecoration(labelText: 'Name'),
++                ),
++                const SizedBox(height: 8),
++                Wrap(
++                  children: Colors.primaries.map((c) {
++                    return GestureDetector(
++                      onTap: () => setState(() => _color = c),
++                      child: Container(
++                        margin: const EdgeInsets.all(4),
++                        width: 30,
++                        height: 30,
++                        decoration: BoxDecoration(
++                          color: c,
++                          shape: BoxShape.circle,
++                          border: _color == c
++                              ? Border.all(color: Colors.black, width: 2)
++                              : null,
++                        ),
++                      ),
++                    );
++                  }).toList(),
++                ),
++                const SizedBox(height: 8),
++                Wrap(
++                  children: [
++                    Icons.solar_power,
++                    Icons.sunny,
++                    Icons.bolt,
++                  ].map((ic) {
++                    return IconButton(
++                      icon: Icon(ic,
++                          color: _icon == ic ? _color : Colors.grey),
++                      onPressed: () => setState(() => _icon = ic),
++                    );
++                  }).toList(),
++                ),
++                const SizedBox(height: 8),
++                ElevatedButton(
++                  onPressed: _testConnection,
++                  child: const Text('Test Connection'),
++                ),
++              ],
++            ),
++          ),
++        ],
++      ),
++    );
++  }
++
++  void _testConnection() {
++    ScaffoldMessenger.of(context)
++        .showSnackBar(const SnackBar(content: Text('Connection OK (mock)')));
++  }
++
++  void _save() {
++    final plant = Plant(
++      id: DateTime.now().millisecondsSinceEpoch.toString(),
++      name: _nameCtrl.text,
++      url: _urlCtrl.text,
++      username: _userCtrl.text,
++      password: _passCtrl.text,
++      themeColor: _color,
++      icon: _icon.codePoint.toString(),
++      readings: [
++        Reading(timestamp: DateTime.now(), power: 0),
++      ],
++    );
++    ref.read(plantsProvider.notifier).addPlant(plant);
++    context.goNamed('dashboard');
++  }
++}
+diff --git a/lib/screens/plant_detail_screen.dart b/lib/screens/plant_detail_screen.dart
+index e69de29bb2d1d6434b8b29ae775ad8c2e48c5391..2e835d36ca63904930e54c675eb846ef65c94846 100644
+--- a/lib/screens/plant_detail_screen.dart
++++ b/lib/screens/plant_detail_screen.dart
+@@ -0,0 +1,99 @@
++import 'package:fl_chart/fl_chart.dart';
++import 'package:flutter/material.dart';
++import 'package:flutter_riverpod/flutter_riverpod.dart';
++import 'package:url_launcher/url_launcher.dart';
++
++import '../models/reading.dart';
++import '../providers/plants_provider.dart';
++
++enum Range { daily, weekly, monthly }
++
++class PlantDetailScreen extends ConsumerStatefulWidget {
++  const PlantDetailScreen({super.key, required this.plantId});
++  final String plantId;
++
++  @override
++  ConsumerState<PlantDetailScreen> createState() => _PlantDetailScreenState();
++}
++
++class _PlantDetailScreenState extends ConsumerState<PlantDetailScreen> {
++  Range range = Range.daily;
++
++  @override
++  Widget build(BuildContext context) {
++    final plant = ref.watch(plantsProvider).firstWhere((p) => p.id == widget.plantId);
++    final readings = _filteredReadings(plant.readings);
++    final spots = [
++      for (int i = 0; i < readings.length; i++)
++        FlSpot(i.toDouble(), readings[i].power)
++    ];
++    final maxPower = readings.isNotEmpty
++        ? readings.map((e) => e.power).reduce((a, b) => a > b ? a : b)
++        : 0.0;
++    final avgPower = readings.isNotEmpty
++        ? readings.map((e) => e.power).reduce((a, b) => a + b) / readings.length
++        : 0.0;
++
++    return Scaffold(
++      appBar: AppBar(title: Text(plant.name)),
++      body: Padding(
++        padding: const EdgeInsets.all(16),
++        child: Column(
++          children: [
++            ToggleButtons(
++              isSelected: Range.values.map((r) => r == range).toList(),
++              onPressed: (i) => setState(() => range = Range.values[i]),
++              children: const [
++                Padding(
++                  padding: EdgeInsets.symmetric(horizontal: 12),
++                  child: Text('Daily'),
++                ),
++                Padding(
++                  padding: EdgeInsets.symmetric(horizontal: 12),
++                  child: Text('Weekly'),
++                ),
++                Padding(
++                  padding: EdgeInsets.symmetric(horizontal: 12),
++                  child: Text('Monthly'),
++                ),
++              ],
++            ),
++            const SizedBox(height: 16),
++            Expanded(
++              child: LineChart(
++                LineChartData(
++                  borderData: FlBorderData(show: false),
++                  lineBarsData: [
++                    LineChartBarData(
++                      isCurved: true,
++                      color: plant.themeColor,
++                      spots: spots,
++                    )
++                  ],
++                ),
++              ),
++            ),
++            const SizedBox(height: 16),
++            Text('Max: ${maxPower.toStringAsFixed(1)} kW'),
++            Text('Average: ${avgPower.toStringAsFixed(1)} kW'),
++            const SizedBox(height: 16),
++            ElevatedButton(
++              onPressed: () async {
++                final uri = Uri.parse(plant.url);
++                if (await canLaunchUrl(uri)) {
++                  await launchUrl(uri);
++                }
++              },
++              child: const Text('Go to site'),
++            ),
++          ],
++        ),
++      ),
++    );
++  }
++
++  List<Reading> _filteredReadings(List<Reading> all) {
++    // For now we return original readings for all ranges.
++    return all;
++  }
++}
+diff --git a/lib/screens/stats_screen.dart b/lib/screens/stats_screen.dart
+index e69de29bb2d1d6434b8b29ae775ad8c2e48c5391..9e14e79b4a11847e8a8126af036a1f91ee834b16 100644
+--- a/lib/screens/stats_screen.dart
++++ b/lib/screens/stats_screen.dart
+@@ -0,0 +1,122 @@
++import 'package:fl_chart/fl_chart.dart';
++import 'package:flutter/material.dart';
++import 'package:flutter_riverpod/flutter_riverpod.dart';
++
++import '../providers/plants_provider.dart';
++import '../models/plant.dart';
++
++class StatsScreen extends ConsumerWidget {
++  const StatsScreen({super.key});
++
++  @override
++  Widget build(BuildContext context, WidgetRef ref) {
++    final plants = ref.watch(plantsProvider);
++    return DefaultTabController(
++      length: 3,
++      child: Scaffold(
++        appBar: AppBar(
++          title: const Text('Stats'),
++          bottom: const TabBar(tabs: [
++            Tab(text: 'Total'),
++            Tab(text: 'Comparison'),
++            Tab(text: 'Export'),
++          ]),
++        ),
++        body: TabBarView(
++          children: [
++            _TotalGenerationTab(plants: plants),
++            _ComparisonTab(plants: plants),
++            _ExportTab(plants: plants),
++          ],
++        ),
++      ),
++    );
++  }
++}
++
++class _TotalGenerationTab extends StatelessWidget {
++  const _TotalGenerationTab({required this.plants});
++  final List<Plant> plants;
++
++  @override
++  Widget build(BuildContext context) {
++    if (plants.isEmpty) return const Center(child: Text('No data'));
++    final days = plants.first.readings.length;
++    final totals = List<double>.filled(days, 0);
++    for (var p in plants) {
++      for (var i = 0; i < p.readings.length; i++) {
++        totals[i] += p.readings[i].power;
++      }
++    }
++    final spots = [
++      for (int i = 0; i < totals.length; i++)
++        FlSpot(i.toDouble(), totals[i])
++    ];
++    return Padding(
++      padding: const EdgeInsets.all(16),
++      child: LineChart(
++        LineChartData(
++          borderData: FlBorderData(show: false),
++          lineBarsData: [
++            LineChartBarData(
++              spots: spots,
++              isCurved: true,
++              color: Theme.of(context).colorScheme.primary,
++            )
++          ],
++        ),
++      ),
++    );
++  }
++}
++
++class _ComparisonTab extends StatelessWidget {
++  const _ComparisonTab({required this.plants});
++  final List<Plant> plants;
++
++  @override
++  Widget build(BuildContext context) {
++    final bars = [
++      for (int i = 0; i < plants.length; i++)
++        BarChartGroupData(x: i, barRods: [
++          BarChartRodData(toY: plants[i].readings.fold(0.0, (a, b) => a + b.power))
++        ])
++    ];
++    return Padding(
++      padding: const EdgeInsets.all(16),
++      child: BarChart(
++        BarChartData(
++          titlesData: FlTitlesData(
++            bottomTitles: AxisTitles(
++              sideTitles: SideTitles(showTitles: true, getTitlesWidget: (v, meta) {
++                final index = v.toInt();
++                if (index < 0 || index >= plants.length) return const SizedBox();
++                return Text(plants[index].name);
++              }),
++            ),
++          ),
++          barGroups: bars,
++        ),
++      ),
++    );
++  }
++}
++
++class _ExportTab extends StatelessWidget {
++  const _ExportTab({required this.plants});
++  final List<Plant> plants;
++
++  @override
++  Widget build(BuildContext context) {
++    return Center(
++      child: ElevatedButton(
++        onPressed: () {
++          ScaffoldMessenger.of(context).showSnackBar(
++            const SnackBar(content: Text('Exported (mock)')),
++          );
++        },
++        child: const Text('Export CSV'),
++      ),
++    );
++  }
++}
+diff --git a/pubspec.yaml b/pubspec.yaml
+index 7612ec079a7820806c32585b792caed03e3b713a..d1800b8f1e633cd2a5b32c1e6b4381afbdaacd0c 100644
+--- a/pubspec.yaml
++++ b/pubspec.yaml
+@@ -15,50 +15,51 @@ publish_to: 'none' # Remove this line if you wish to publish to pub.dev
+ # Read more about iOS versioning at
+ # https://developer.apple.com/library/archive/documentation/General/Reference/InfoPlistKeyReference/Articles/CoreFoundationKeys.html
+ # In Windows, build-name is used as the major, minor, and patch parts
+ # of the product and file versions while build-number is used as the build suffix.
+ version: 1.0.0+1
+ 
+ environment:
+   sdk: ^3.7.2
+ 
+ # Dependencies specify other packages that your package needs in order to work.
+ # To automatically upgrade your package dependencies to the latest versions
+ # consider running `flutter pub upgrade --major-versions`. Alternatively,
+ # dependencies can be manually updated by changing the version numbers below to
+ # the latest version available on pub.dev. To see which dependencies have newer
+ # versions available, run `flutter pub outdated`.
+ dependencies:
+   flutter:
+     sdk: flutter
+ 
+   # The following adds the Cupertino Icons font to your application.
+   # Use with the CupertinoIcons class for iOS style icons.
+   cupertino_icons: ^1.0.8
+   go_router: ^16.1.0
+   flutter_riverpod: ^2.6.1
+   fl_chart: ^1.0.0
++  url_launcher: ^6.1.11
+ 
+ dev_dependencies:
+   flutter_test:
+     sdk: flutter
+ 
+   # The "flutter_lints" package below contains a set of recommended lints to
+   # encourage good coding practices. The lint set provided by the package is
+   # activated in the `analysis_options.yaml` file located at the root of your
+   # package. See that file for information about deactivating specific lint
+   # rules and activating additional ones.
+   flutter_lints: ^5.0.0
+ 
+ # For information on the generic Dart part of this file, see the
+ # following page: https://dart.dev/tools/pub/pubspec
+ 
+ # The following section is specific to Flutter packages.
+ flutter:
+ 
+   # The following line ensures that the Material Icons font is
+   # included with your application, so that you can use the icons in
+   # the material Icons class.
+   uses-material-design: true
+ 
+   # To add assets to your application, add an assets section, like this:
+   # assets:

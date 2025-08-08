@@ -1,7 +1,18 @@
 class Reading {
-  final DateTime ts; // 計測時刻
-  final double kw; // 発電量
-  final double? dayMax; // その時点での当日最高
+  final DateTime timestamp;
+  final double power;
 
-  Reading({required this.ts, required this.kw, this.dayMax});
+  Reading({required this.timestamp, required this.power});
+
+  factory Reading.fromJson(Map<String, dynamic> json) {
+    return Reading(
+      timestamp: DateTime.parse(json['timestamp'] as String),
+      power: (json['power'] as num).toDouble(),
+    );
+  }
+
+  Map<String, dynamic> toJson() => {
+    'timestamp': timestamp.toIso8601String(),
+    'power': power,
+  };
 }

@@ -1,0 +1,46 @@
+*** a/lib/models/reading.dart
+--- b/lib/models/reading.dart
+@@
+-import 'dart:convert';
+ 
+ class Reading {
+   final DateTime timestamp;
+   final double power;
+*** a/lib/router.dart
+--- b/lib/router.dart
+@@
+-import 'package:flutter/material.dart';
++// import 'package:flutter/material.dart'; // 未使用のためコメントアウト
+*** a/lib/screens/plant_add_screen.dart
+--- b/lib/screens/plant_add_screen.dart
+@@
+-import '../providers/plants_provider.dart';
++// 重複していたため削除
+*** a/lib/screens/plant_detail_screen.dart
+--- b/lib/screens/plant_detail_screen.dart
+@@
+-import '../providers/plants_provider.dart';
++// 重複していたため削除
+*** a/lib/screens/stats_screen.dart
+--- b/lib/screens/stats_screen.dart
+@@
+-import '../providers/plants_provider.dart';
++// 重複していたため削除
+*** a/lib/screens/dashboard_screen.dart
+--- b/lib/screens/dashboard_screen.dart
+@@
+-    someColor.withOpacity(0.5);
++    someColor.withValues(alpha: (0.5 * 255).round());
+*** a/lib/models/plant.dart
+--- b/lib/models/plant.dart
+@@
+-    color.value
++    color.toARGB32()
+*** a/lib/screens/stats_screen.dart
+--- b/lib/screens/stats_screen.dart
+@@
+-  if (condition) statement;
++  if (condition) {
++    statement;
++  }
+
