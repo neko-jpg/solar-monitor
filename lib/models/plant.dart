@@ -1,18 +1,18 @@
+import 'package:equatable/equatable.dart';
 import 'package:flutter/material.dart';
-
 import 'reading.dart';
 
-class Plant {
+class Plant extends Equatable {
   final String id;
   final String name;
   final String url;
   final String username;
   final String password;
-  final Color themeColor;
-  final String icon;
+  final Color themeColor; // Color(value)
+  final String icon; // Material icon codePoint を文字列で保存
   final List<Reading> readings;
 
-  Plant({
+  const Plant({
     required this.id,
     required this.name,
     required this.url,
@@ -45,30 +45,46 @@ class Plant {
     );
   }
 
-  factory Plant.fromJson(Map<String, dynamic> json) {
+  // JSON -> Plant
+  factory Plant.fromJson(Map<String, dynamic> j) {
     return Plant(
-      id: json['id'] as String,
-      name: json['name'] as String,
-      url: json['url'] as String,
-      username: json['username'] as String,
-      password: json['password'] as String,
-      themeColor: Color(json['themeColor'] as int),
-      icon: json['icon'] as String,
+      id: j['id'] as String,
+      name: j['name'] as String,
+      url: j['url'] as String? ?? '',
+      username: j['username'] as String? ?? '',
+      password: j['password'] as String? ?? '',
+      themeColor: Color(
+        (j['themeColor'] as num?)?.toInt() ?? const Color(0xFF1E6BFF).value,
+      ),
+      icon: j['icon'] as String? ?? '0',
       readings:
-          (json['readings'] as List<dynamic>)
-              .map((e) => Reading.fromJson(e as Map<String, dynamic>))
+          (j['readings'] as List? ?? const [])
+              .map((e) => Reading.fromJson(Map<String, dynamic>.from(e as Map)))
               .toList(),
     );
   }
 
+  // Plant -> JSON
   Map<String, dynamic> toJson() => {
     'id': id,
     'name': name,
     'url': url,
     'username': username,
     'password': password,
-    'themeColor': themeColor.toARGB32(),
+    'themeColor': themeColor.value,
     'icon': icon,
     'readings': readings.map((r) => r.toJson()).toList(),
   };
+
+  @override
+  List<Object?> get props => [
+    id,
+    name,
+    url,
+    username,
+    password,
+    themeColor,
+    icon,
+    readings,
+  ];
 }

@@ -1,10 +1,11 @@
+// lib/router.dart
 import 'package:go_router/go_router.dart';
 
-import 'screens/dashboard_screen.dart';
-import 'screens/plant_add_screen.dart';
-import 'screens/plant_detail_screen.dart';
-import 'screens/stats_screen.dart';
-import 'screens/notification_setting_screen.dart';
+import 'screens/dashboard/dashboard_screen.dart';
+import 'screens/plant_add_edit/plant_add_edit_screen.dart';
+import 'screens/plant_detail/plant_detail_screen.dart';
+import 'screens/stats/stats_screen.dart';
+import 'screens/settings/notification_settings_screen.dart';
 
 final router = GoRouter(
   routes: [
@@ -16,7 +17,7 @@ final router = GoRouter(
     GoRoute(
       path: '/plant/add',
       name: 'addPlant',
-      builder: (context, state) => const PlantAddScreen(),
+      builder: (context, state) => const PlantAddEditScreen(),
     ),
     GoRoute(
       path: '/plant/:id',
@@ -26,6 +27,13 @@ final router = GoRouter(
               PlantDetailScreen(plantId: state.pathParameters['id']!),
     ),
     GoRoute(
+      path: '/plant/:id/edit',
+      name: 'editPlant',
+      builder:
+          (context, state) =>
+              PlantAddEditScreen(plantId: state.pathParameters['id']),
+    ),
+    GoRoute(
       path: '/stats',
       name: 'stats',
       builder: (context, state) => const StatsScreen(),
@@ -33,7 +41,7 @@ final router = GoRouter(
     GoRoute(
       path: '/notifications',
       name: 'notifications',
-      builder: (context, state) => const NotificationSettingScreen(),
+      builder: (context, state) => const NotificationSettingsScreen(),
     ),
   ],
 );
