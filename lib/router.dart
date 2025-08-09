@@ -1,9 +1,9 @@
 import 'package:go_router/go_router.dart';
 
-import 'screens/dashboard/dashboard_screen.dart';
+import 'screens/dashboard/widgets/dashboard_screen.dart';
 import 'screens/plant_add_edit/plant_add_edit_screen.dart';
 import 'screens/plant_detail/plant_detail_screen.dart';
-import 'screens/stats/stats_screen.dart';
+import 'screens/stats/widgets/stats_screen.dart';
 import 'screens/settings/notification_settings_screen.dart';
 
 final router = GoRouter(

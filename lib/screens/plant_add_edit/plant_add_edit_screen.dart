@@ -1,21 +1,29 @@
+// lib/screens/plant_add_edit/plant_add_edit_screen.dart
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+// Network（接続テスト用）
+import 'package:flutter_application_1/services/network/default_network_service.dart';
+import '../../services/network/network_service.dart';
+
+// App layers
 import '../../providers/plants_provider.dart';
 import '../../models/plant.dart';
 import '../../models/reading.dart';
 import '../../core/constants.dart';
 
-import '../../services/network/default_network_service.dart';
-import '../../services/network/network_service.dart';
-
+// Step widgets
 import 'widgets/step_url_input.dart';
 import 'widgets/step_credentials.dart';
 import 'widgets/step_theme_icon.dart';
 
+// Discovery
+import '../../services/discovery_service.dart';
+
+enum _ConnState { idle, testing, ok, ng }
+
 class PlantAddEditScreen extends ConsumerStatefulWidget {
-  // 編集モード：plantIdを渡す
   const PlantAddEditScreen({super.key, this.plantId});
   final String? plantId;
 
@@ -36,9 +44,11 @@ class _PlantAddEditScreenState extends ConsumerState<PlantAddEditScreen> {
   Color themeColor = AppTok.blue;
   IconData icon = Icons.wb_sunny_rounded;
 
-  bool testing = false;
-  String? testMessage;
+  _ConnState conn = _ConnState.idle;
+  String? connMsg;
+
   final NetworkService net = DefaultNetworkService();
+  final _discovery = DiscoveryService();
 
   bool get isEdit => widget.plantId != null;
 
@@ -71,189 +81,293 @@ class _PlantAddEditScreenState extends ConsumerState<PlantAddEditScreen> {
   @override
   Widget build(BuildContext context) {
     final plants = ref.watch(plantsProvider);
-    return Scaffold(
-      appBar: AppBar(title: Text(isEdit ? 'Edit Plant' : 'Add Plant')),
-      backgroundColor: const Color(0xFFF6F7FB),
-      body: Stepper(
-        currentStep: step,
-        controlsBuilder: (c, details) {
-          final isLast = step == 2;
-          final canNext = switch (step) {
-            0 => _formKey1.currentState?.validate() ?? false,
-            1 => _formKey2.currentState?.validate() ?? false,
-            _ => true,
-          };
-          return Padding(
-            padding: const EdgeInsets.only(top: 8),
-            child: Row(
-              children: [
-                ElevatedButton(
-                  onPressed: canNext ? details.onStepContinue : null,
-                  style: ElevatedButton.styleFrom(
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                  ),
-                  child: Text(isLast ? (isEdit ? 'Save' : 'Register') : 'Next'),
-                ),
-                const SizedBox(width: 8),
-                if (step > 0)
-                  OutlinedButton(
-                    onPressed: details.onStepCancel,
-                    style: OutlinedButton.styleFrom(
+
+    return GestureDetector(
+      onTap: () => FocusScope.of(context).unfocus(),
+      child: Scaffold(
+        backgroundColor: const Color(0xFFF6F7FB),
+        appBar: AppBar(
+          title: Text(isEdit ? 'Edit Plant' : 'Add Plant'),
+          actions: [
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 8),
+              child: _buildConnChip(),
+            ),
+          ],
+        ),
+        body: Stepper(
+          elevation: 1,
+          margin: const EdgeInsets.all(16),
+          currentStep: step,
+          controlsBuilder: (c, details) {
+            final isLast = step == 2;
+            final canNext = switch (step) {
+              0 => _formKey1.currentState?.validate() ?? false,
+              1 => _formKey2.currentState?.validate() ?? false,
+              _ => true,
+            };
+
+            return Padding(
+              padding: const EdgeInsets.only(top: 12),
+              child: Row(
+                children: [
+                  FilledButton(
+                    onPressed: canNext ? details.onStepContinue : null,
+                    style: FilledButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 20,
+                        vertical: 14,
+                      ),
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(12),
                       ),
                     ),
-                    child: const Text('Back'),
+                    child: Text(
+                      isLast ? (isEdit ? 'Save' : 'Register') : 'Next',
+                    ),
                   ),
-                if (step == 2) ...[
                   const SizedBox(width: 8),
-                  ElevatedButton(
-                    onPressed: testing ? null : _testConnection,
+                  if (step > 0)
+                    OutlinedButton(
+                      onPressed: details.onStepCancel,
+                      style: OutlinedButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 16,
+                          vertical: 14,
+                        ),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                      ),
+                      child: const Text('Back'),
+                    ),
+                  const Spacer(),
+                  ElevatedButton.icon(
+                    onPressed:
+                        conn == _ConnState.testing ? null : _testConnection,
+                    icon:
+                        conn == _ConnState.testing
+                            ? const SizedBox(
+                              width: 16,
+                              height: 16,
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            )
+                            : const Icon(Icons.wifi_tethering),
+                    label: const Text('Test Connection'),
                     style: ElevatedButton.styleFrom(
                       backgroundColor: AppTok.blue,
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 16,
+                        vertical: 14,
+                      ),
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(12),
                       ),
                     ),
-                    child:
-                        testing
-                            ? const SizedBox(
-                              width: 18,
-                              height: 18,
-                              child: CircularProgressIndicator(
-                                strokeWidth: 2,
-                                color: Colors.white,
-                              ),
-                            )
-                            : const Text('Test Connection'),
                   ),
                 ],
-              ],
-            ),
-          );
-        },
-        onStepContinue: () async {
-          if (step < 2) {
-            setState(() => step++);
-          } else {
-            await _save(plants);
-          }
-        },
-        onStepCancel: () => setState(() => step--),
-        steps: [
-          Step(
-            title: const Text('Step 1'),
-            subtitle: const Text('Enter plant URL'),
-            isActive: step >= 0,
-            state: step > 0 ? StepState.complete : StepState.indexed,
-            content: Form(
-              key: _formKey1,
-              child: StepUrlInput(
-                controller: urlC,
-                validator: (v) {
-                  final url = v?.trim() ?? '';
-                  final ok =
-                      Uri.tryParse(url)?.hasAbsolutePath == true &&
-                      (url.startsWith('http://') || url.startsWith('https://'));
-                  if (!ok) return 'Enter valid URL (http/https)';
-                  return null;
-                },
               ),
-            ),
-          ),
-          Step(
-            title: const Text('Step 2'),
-            subtitle: const Text('Enter login information'),
-            isActive: step >= 1,
-            state: step > 1 ? StepState.complete : StepState.indexed,
-            content: Form(
-              key: _formKey2,
-              child: StepCredentials(
-                userC: userC,
-                passC: passC,
-                userValidator:
-                    (v) => (v == null || v.isEmpty) ? 'Required' : null,
-                passValidator:
-                    (v) =>
-                        (v == null || v.isEmpty)
-                            ? 'Required'
-                            : (v.length < 4 ? 'Too short' : null),
-              ),
-            ),
-          ),
-          Step(
-            title: const Text('Step 3'),
-            subtitle: const Text('Enter name/theme'),
-            isActive: step >= 2,
-            content: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                StepThemeIcon(
-                  nameC: nameC,
-                  initialColor: themeColor,
-                  initialIcon: icon,
-                  onChanged:
-                      (c, i) => setState(() {
-                        themeColor = c;
-                        icon = i;
-                      }),
+            );
+          },
+          onStepContinue: () async {
+            FocusScope.of(context).unfocus();
+            if (step < 2) {
+              setState(() => step++);
+            } else {
+              await _save(plants);
+            }
+          },
+          onStepCancel: () => setState(() => step--),
+          steps: [
+            Step(
+              title: const Text('Step 1'),
+              subtitle: const Text('Enter plant URL'),
+              isActive: step >= 0,
+              state: step > 0 ? StepState.complete : StepState.indexed,
+              content: Card(
+                elevation: 0,
+                margin: EdgeInsets.zero,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(16),
                 ),
-                const SizedBox(height: 8),
-                if (testMessage != null)
-                  Text(
-                    testMessage!,
-                    style: TextStyle(
-                      color:
-                          testMessage!.contains('OK')
-                              ? Colors.green
-                              : Colors.red,
+                child: Padding(
+                  padding: const EdgeInsets.all(12),
+                  child: Form(
+                    key: _formKey1,
+                    child: StepUrlInput(
+                      controller: urlC,
+                      validator: (v) {
+                        final raw = (v ?? '').trim();
+                        if (raw.isEmpty) return 'URL is required';
+                        final hasScheme =
+                            raw.startsWith('http://') ||
+                            raw.startsWith('https://');
+                        final test = hasScheme ? raw : 'https://$raw';
+                        final ok = Uri.tryParse(test)?.hasAbsolutePath == true;
+                        if (!ok) return 'Enter valid URL';
+                        return null;
+                      },
                     ),
                   ),
-              ],
+                ),
+              ),
             ),
-          ),
-        ],
+            Step(
+              title: const Text('Step 2'),
+              subtitle: const Text('Enter login information'),
+              isActive: step >= 1,
+              state: step > 1 ? StepState.complete : StepState.indexed,
+              content: Card(
+                elevation: 0,
+                margin: EdgeInsets.zero,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(16),
+                ),
+                child: Padding(
+                  padding: const EdgeInsets.all(12),
+                  child: Form(
+                    key: _formKey2,
+                    child: StepCredentials(
+                      userC: userC,
+                      passC: passC,
+                      userValidator:
+                          (v) => (v == null || v.isEmpty) ? 'Required' : null,
+                      passValidator:
+                          (v) =>
+                              (v == null || v.isEmpty)
+                                  ? 'Required'
+                                  : (v.length < 4 ? 'Too short' : null),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+            Step(
+              title: const Text('Step 3'),
+              subtitle: const Text('Enter name/theme'),
+              isActive: step >= 2,
+              content: Card(
+                elevation: 0,
+                margin: EdgeInsets.zero,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(16),
+                ),
+                child: Padding(
+                  padding: const EdgeInsets.all(12),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      StepThemeIcon(
+                        nameC: nameC,
+                        initialColor: themeColor,
+                        initialIcon: icon,
+                        onChanged:
+                            (c, i) => setState(() {
+                              themeColor = c;
+                              icon = i;
+                            }),
+                      ),
+                      const SizedBox(height: 8),
+                      if (connMsg != null)
+                        Text(
+                          connMsg!,
+                          style: TextStyle(
+                            color: switch (conn) {
+                              _ConnState.ok => Colors.green,
+                              _ConnState.ng => Colors.red,
+                              _ => Colors.grey,
+                            },
+                          ),
+                        ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
 
+  Widget _buildConnChip() {
+    return switch (conn) {
+      _ConnState.testing => const Chip(label: Text('Testing...')),
+      _ConnState.ok => const Chip(
+        avatar: Icon(Icons.check_circle, color: Colors.green),
+        label: Text('Connected'),
+      ),
+      _ConnState.ng => const Chip(
+        avatar: Icon(Icons.error_outline, color: Colors.red),
+        label: Text('Failed'),
+      ),
+      _ => const SizedBox.shrink(),
+    };
+  }
+
   Future<void> _testConnection() async {
+    FocusScope.of(context).unfocus();
+    var raw = urlC.text.trim();
+    if (raw.isEmpty) {
+      _toast('URL is required');
+      return;
+    }
+    if (!(raw.startsWith('http://') || raw.startsWith('https://')))
+      raw = 'https://$raw';
+    final parsed = Uri.tryParse(raw);
+    if (parsed == null || !parsed.hasAbsolutePath) {
+      _toast('Enter valid URL');
+      return;
+    }
+
     setState(() {
-      testing = true;
-      testMessage = null;
+      conn = _ConnState.testing;
+      connMsg = null;
     });
-    final ok = await net.testConnection(
-      url: urlC.text.trim(),
-      username: userC.text.trim(),
-      password: passC.text,
-    );
-    setState(() {
-      testing = false;
-      testMessage = ok ? 'Connection OK' : 'Connection failed';
-    });
-    if (!mounted) return;
-    ScaffoldMessenger.of(
-      context,
-    ).showSnackBar(SnackBar(content: Text(testMessage!)));
+
+    try {
+      final ok = await net.testConnection(
+        url: raw,
+        username: userC.text.trim(),
+        password: passC.text,
+      );
+      setState(() {
+        conn = ok ? _ConnState.ok : _ConnState.ng;
+        connMsg = ok ? 'Connection OK' : 'Connection failed';
+      });
+      _toast(connMsg!);
+    } catch (e) {
+      setState(() {
+        conn = _ConnState.ng;
+        connMsg = 'Connection failed: $e';
+      });
+      _toast(connMsg!);
+    }
   }
 
   Future<void> _save(List<Plant> all) async {
+    FocusScope.of(context).unfocus();
     final name = (nameC.text.trim().isEmpty) ? 'New Plant' : nameC.text.trim();
-    // 名前重複チェック（同一IDは除外）
+
+    // 重複チェック
     final dup = all.any((p) => p.name == name && p.id != widget.plantId);
     if (dup) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('Name already exists.')));
+      _toast('Name already exists.');
       return;
     }
+
+    final normalizedUrl = () {
+      var raw = urlC.text.trim();
+      if (!(raw.startsWith('http://') || raw.startsWith('https://')))
+        raw = 'https://$raw';
+      return raw;
+    }();
 
     final p = Plant(
       id: widget.plantId ?? DateTime.now().millisecondsSinceEpoch.toString(),
       name: name,
-      url: urlC.text.trim(),
+      url: normalizedUrl,
       username: userC.text.trim(),
       password: passC.text,
       themeColor: themeColor,
@@ -268,12 +382,36 @@ class _PlantAddEditScreenState extends ConsumerState<PlantAddEditScreen> {
     );
 
     final n = ref.read(plantsProvider.notifier);
-    if (isEdit) {
-      n.update(p);
-    } else {
-      n.add(p);
+    try {
+      if (isEdit) {
+        n.update(p);
+      } else {
+        n.add(p);
+      }
+      _toast('Saved');
+
+      // ★ ここで自動探索を実行 → 成功した取り方を保存
+      final res = await _discovery.discoverAndSave(
+        plantId: p.id,
+        baseUrl: p.url,
+        username: p.username,
+        password: p.password,
+      );
+      _toast(res.message);
+
+      if (!mounted) return;
+      context.goNamed('dashboard');
+    } catch (e) {
+      _toast('Failed to save: $e');
     }
+  }
+
+  void _toast(String msg) {
     if (!mounted) return;
-    context.goNamed('dashboard');
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(
+        SnackBar(content: Text(msg), behavior: SnackBarBehavior.floating),
+      );
   }
 }

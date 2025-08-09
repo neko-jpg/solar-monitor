@@ -3,10 +3,10 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 // ↓↓↓ 間違っていたimportパスをすべて修正しました ↓↓↓
-import '../../core/constants.dart';
-import '../../models/plant.dart';
-import '../../providers/plants_provider.dart';
-import 'widgets/plant_detail_chart.dart';
+import '/core/constants.dart';
+import '/models/plant.dart';
+import '/providers/plants_provider.dart';
+import '/widgets/plant_detail_chart.dart';
 
 class PlantDetailScreen extends ConsumerStatefulWidget {
   final String plantId;
