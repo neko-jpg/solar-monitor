@@ -8,6 +8,10 @@ class AppTok {
   static const onDark = Colors.white;
   static const cardBg = Colors.white;
 
+  // ↓↓↓ 不足していた定義を追加 ↓↓↓
+  static const darkCard = Color(0xFF1C2129); // ダークテーマのカード背景
+  static const darkMini = Color(0xFF2D3440); // ダークテーマのミニカード背景
+
   // Card shadow（軽め）
   static const shadow = <BoxShadow>[
     BoxShadow(
