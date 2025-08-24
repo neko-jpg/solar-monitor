@@ -6,7 +6,6 @@ sealed class Result<T> {
   bool get isOk => this is Ok<T>;
   bool get isErr => this is Err<T>;
 
-  /// A utility function to execute a future and wrap its result in a Result type.
   static Future<Result<T>> guard<T>(Future<T> Function() future) async {
     try {
       return Ok(await future());
@@ -15,13 +14,5 @@ sealed class Result<T> {
     }
   }
 }
-
-class Ok<T> extends Result<T> {
-  final T value;
-  const Ok(this.value);
-}
-
-class Err<T> extends Result<T> {
-  final Object error;
-  const Err(this.error);
-}
+class Ok<T> extends Result<T> { final T value; const Ok(this.value); }
+class Err<T> extends Result<T> { final Object error; const Err(this.error); }

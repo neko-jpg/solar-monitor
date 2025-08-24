@@ -36,7 +36,7 @@ class StatsScreen extends ConsumerWidget {
               const SizedBox(height: 16),
               SizedBox(
                 height: 250,
-                child: TotalGenerationChart(readings: allReadings),
+                child: const TotalGenerationChart(),
               ),
               const SizedBox(height: 24),
               Text('Generation by Plant', style: Theme.of(context).textTheme.headlineSmall),
