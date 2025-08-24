@@ -3,14 +3,17 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 
-import '../../../providers/plants_provider.dart';
+import '../../../providers/plants_provider.dart' show plantsProvider;
 import '../../../models/plant.dart';
 import '../../../services/reading_service.dart';
 import '../../../services/network/default_network_service.dart';
-import '../../../providers/plants_provider.dart'
-    show plantsIssuesProvider, healthyPlantsProvider, PlantIssue, IssueKind;
 
-show plantsIssuesProvider, healthyPlantsProvider, PlantIssue, IssueKind;
+// Note: The following models are not yet defined in the stubbed providers.
+// import '../../../providers/plants_provider.dart'
+//     show plantsIssuesProvider, healthyPlantsProvider, PlantIssue, IssueKind;
+
+// Note: This line was a syntax error.
+// show plantsIssuesProvider, healthyPlantsProvider, PlantIssue, IssueKind;
 
 class DashboardScreen extends ConsumerStatefulWidget {
   const DashboardScreen({super.key});
@@ -101,8 +104,9 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final issues = ref.watch(plantsIssuesProvider);
-    final healthy = ref.watch(healthyPlantsProvider);
+    // final issues = ref.watch(plantsIssuesProvider); // TODO: Re-enable when provider is implemented
+    // final healthy = ref.watch(healthyPlantsProvider); // TODO: Re-enable when provider is implemented
+    final plants = ref.watch(plantsProvider);
 
     return Scaffold(
       appBar: AppBar(
@@ -130,21 +134,12 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
         child: ListView(
           padding: const EdgeInsets.fromLTRB(12, 8, 12, 16),
           children: [
-            if (issues.isNotEmpty) ...[
-              Text(
-                'Plants with Issues',
-                style: Theme.of(context).textTheme.titleMedium,
-              ),
-              const SizedBox(height: 8),
-              ...issues.map((i) => _plantTile(i.plant, issue: i)),
-              const SizedBox(height: 16),
-            ],
             Text(
-              'Other Plants',
+              'All Plants',
               style: Theme.of(context).textTheme.titleMedium,
             ),
             const SizedBox(height: 8),
-            if (healthy.isEmpty)
+            if (plants.isEmpty)
               const Card(
                 child: Padding(
                   padding: EdgeInsets.all(16),
@@ -152,14 +147,16 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                 ),
               )
             else
-              ...healthy.map((p) => _plantTile(p)),
+              ...plants.map((p) => _plantTile(p)),
           ],
         ),
       ),
     );
   }
 
-  Widget _plantTile(Plant p, {PlantIssue? issue}) {
+  // TODO: Re-enable issue parameter when PlantIssue is available
+  // Widget _plantTile(Plant p, {PlantIssue? issue}) {
+  Widget _plantTile(Plant p) {
     final v = _latestPower[p.id];
     final t = _latestAt[p.id];
 
@@ -181,16 +178,9 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
             color: p.themeColor,
           ),
         ),
-        title: Row(
-          children: [
-            Expanded(
-              child: Text(
-                p.name,
-                style: const TextStyle(fontWeight: FontWeight.w600),
-              ),
-            ),
-            if (issue != null) _issueBadge(issue),
-          ],
+        title: Text(
+          p.name,
+          style: const TextStyle(fontWeight: FontWeight.w600),
         ),
         subtitle:
             v == null
@@ -211,26 +201,27 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
     );
   }
 
-  Widget _issueBadge(PlantIssue i) {
-    switch (i.kind) {
-      case IssueKind.stale:
-        return const Chip(
-          backgroundColor: Color(0xFFFFF3CD),
-          label: Text('STALE', style: TextStyle(color: Color(0xFF856404))),
-          avatar: Icon(Icons.schedule, size: 18, color: Color(0xFF856404)),
-        );
-      case IssueKind.low:
-        return const Chip(
-          backgroundColor: Color(0xFFF8D7DA),
-          label: Text('LOW', style: TextStyle(color: Color(0xFF721C24))),
-          avatar: Icon(Icons.trending_down, size: 18, color: Color(0xFF721C24)),
-        );
-      case IssueKind.drop:
-        return const Chip(
-          backgroundColor: Color(0xFFD1ECF1),
-          label: Text('DROP', style: TextStyle(color: Color(0xFF0C5460))),
-          avatar: Icon(Icons.show_chart, size: 18, color: Color(0xFF0C5460)),
-        );
-    }
-  }
+  // TODO: Re-enable when PlantIssue and its related providers are implemented.
+  // Widget _issueBadge(PlantIssue i) {
+  //   switch (i.kind) {
+  //     case IssueKind.stale:
+  //       return const Chip(
+  //         backgroundColor: Color(0xFFFFF3CD),
+  //         label: Text('STALE', style: TextStyle(color: Color(0xFF856404))),
+  //         avatar: Icon(Icons.schedule, size: 18, color: Color(0xFF856404)),
+  //       );
+  //     case IssueKind.low:
+  //       return const Chip(
+  //         backgroundColor: Color(0xFFF8D7DA),
+  //         label: Text('LOW', style: TextStyle(color: Color(0xFF721C24))),
+  //         avatar: Icon(Icons.trending_down, size: 18, color: Color(0xFF721C24)),
+  //       );
+  //     case IssueKind.drop:
+  //       return const Chip(
+  //         backgroundColor: Color(0xFFD1ECF1),
+  //         label: Text('DROP', style: TextStyle(color: Color(0xFF0C5460))),
+  //         avatar: Icon(Icons.show_chart, size: 18, color: Color(0xFF0C5460)),
+  //       );
+  //   }
+  // }
 }
