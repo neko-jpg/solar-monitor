@@ -59,10 +59,10 @@ class _PlantTile extends ConsumerWidget {
       leading: CircleAvatar(backgroundColor: Color(plant.color)),
       title: Text(plant.name),
       subtitle: async.when(
-        loading: ()=> const SkeletonTile(),
-        error: (e,_)=>(const Text('取得失敗')),
-        data: (r){
-          if (r==null) return const Text('データなし');
+        loading: () => const SkeletonTile(),
+        error: (e, _) => const Text('取得失敗'),
+        data: (r) {
+          if (r == null) return const Text('データなし');
           final time = DateFormat('MM/dd HH:mm').format(r.timestamp);
           return Text('${r.power.toStringAsFixed(1)} kW  ·  $time');
         },
