@@ -6,10 +6,7 @@ import '../../core/exceptions.dart';
 import 'network_service.dart';
 
 class DefaultNetworkService implements NetworkService {
-  final Dio _dio;
-  final CookieJar _jar;
-  final SecureCookieStore _sec;
-
+  final Dio _dio; final CookieJar _jar; final SecureCookieStore _sec;
   DefaultNetworkService._(this._dio, this._jar, this._sec);
 
   static Future<DefaultNetworkService> create({
@@ -19,81 +16,53 @@ class DefaultNetworkService implements NetworkService {
       connectTimeout: timeout,
       receiveTimeout: timeout,
       sendTimeout: timeout,
-      headers: {'User-Agent': 'SolarTrack/1.0'},
+      headers: { 'Accept': 'application/json, text/plain, */*' },
     ));
     final jar = CookieJar();
     final sec = SecureCookieStore();
     dio.interceptors.add(CookieManager(jar));
-    // Add an interceptor for logging/error handling later if needed
     return DefaultNetworkService._(dio, jar, sec);
   }
 
   @override
-  Future<void> login(Uri baseUrl, String username, String password) async {
-    try {
-      // Assume login endpoint is at the base URL path
-      final response = await _dio.postUri(
-        baseUrl,
-        data: {'username': username, 'password': password},
-        options: Options(contentType: Headers.formUrlEncodedContentType),
-      );
-
-      if (response.statusCode != 200) {
-        throw AppException(AppExceptionKind.auth, 'Login failed: Invalid status code ${response.statusCode}');
-      }
-
-      // Persist cookies on successful login
-      await persistCookies(baseUrl);
-    } on DioException catch (e) {
-      throw _convertDioError(e);
-    } catch (e) {
-      throw AppException(AppExceptionKind.unknown, 'An unknown login error occurred', e);
-    }
-  }
-
-  @override
   Future<Response<T>> getJson<T>(Uri url) async {
+    await restoreCookies(url);
     try {
-      await restoreCookies(url);
-      final response = await _dio.get<T>(url.toString(), options: Options(responseType: ResponseType.json));
-      return response;
-    } on DioException catch (e) {
-      throw _convertDioError(e);
-    } catch (e) {
-      throw AppException(AppExceptionKind.unknown, 'An unknown GET error occurred', e);
-    }
+      final res = await _dio.get<T>(url.toString());
+      await persistCookies(url);
+      return res;
+    } on DioException catch (e) { throw _convertDioError(e); }
   }
 
   @override
   Future<Response<T>> getText<T>(Uri url) async {
+    await restoreCookies(url);
     try {
-      await restoreCookies(url);
-      final response = await _dio.get<T>(url.toString(), options: Options(responseType: ResponseType.plain));
-      return response;
-    } on DioException catch (e) {
-      throw _convertDioError(e);
-    } catch (e) {
-      throw AppException(AppExceptionKind.unknown, 'An unknown GET error occurred', e);
-    }
+      final res = await _dio.get<T>(url.toString(), options: Options(responseType: ResponseType.plain));
+      await persistCookies(url);
+      return res;
+    } on DioException catch (e) { throw _convertDioError(e); }
+  }
+
+  @override
+  Future<void> login(Uri baseUrl, String username, String password) async {
+    // 任意：必要になったら POST 実装
+    // await _dio.post('${baseUrl}/login', data: {...});
   }
 
   @override
   Future<void> persistCookies(Uri base) async {
     final cookies = await _jar.loadForRequest(base);
-    if (cookies.isNotEmpty) {
-      final map = {for (final c in cookies) c.name: c.value};
-      await _sec.save(base.host, map);
-    }
+    final map = <String, String>{ for (final c in cookies) c.name : c.value };
+    await _sec.save(base.host, map);
   }
 
-  /// Loads cookies from secure storage into the jar for a given host.
   @override
   Future<void> restoreCookies(Uri base) async {
-    final saved = await _sec.load(base.host);
-    if (saved.isNotEmpty) {
-      final cookies = saved.entries.map((e) => Cookie(e.key, e.value)).toList();
-      await _jar.saveFromResponse(base, cookies);
-    }
+    final map = await _sec.load(base.host);
+    if (map.isEmpty) return;
+    final list = map.entries.map((e) => Cookie(e.key, e.value)).toList();
+    await _jar.saveFromResponse(base, list);
   }
 
   AppException _convertDioError(DioException e) {

@@ -7,46 +7,32 @@ import '../services/reading/reading_service.dart';
 import '../core/result.dart';
 import 'plants_provider.dart';
 
-// Using the name from the design doc
-final networkProvider = FutureProvider<NetworkService>((ref) {
-  return DefaultNetworkService.create();
-});
-
+final networkProvider = FutureProvider<NetworkService>((ref) async => DefaultNetworkService.create());
 final readingServiceProvider = Provider<ReadingService>((ref) {
-  final net = ref.watch(networkProvider).value;
+  final net = ref.watch(networkProvider).maybeWhen(data: (n) => n, orElse: () => null);
   if (net == null) {
-    throw Exception("NetworkService not initialized");
+    // ダミー（呼ばれない想定）
+    throw StateError('NetworkService not ready');
   }
   return ReadingService(net);
 });
 
-// 1) Fetches only the latest reading for a given plant.
 final latestReadingProvider = FutureProvider.family<Reading?, Plant>((ref, plant) async {
-  final readingService = ref.watch(readingServiceProvider);
-  final result = await readingService.fetchFromJson(plant.url);
-  return switch (result) {
-    Ok(value: final readings) => readings.isNotEmpty ? readings.last : null,
-    Err(:final error) => throw error,
-  };
+  final net = await ref.watch(networkProvider.future);
+  final svc = ReadingService(net);
+  final res = await svc.fetchFromJson(plant.url);
+  if (res is Ok<List<Reading>>) return res.value.isEmpty ? null : res.value.last;
+  return null;
 });
 
-// 2) Fetches all readings for all plants.
 final allReadingsProvider = FutureProvider<Map<String, List<Reading>>>((ref) async {
   final plants = ref.watch(plantsProvider);
-  final readingService = ref.watch(readingServiceProvider);
-
-  final allReadings = <String, List<Reading>>{};
-
-  // Fetch readings for all plants in parallel.
-  await Future.wait(plants.map((plant) async {
-    final result = await readingService.fetchFromJson(plant.url);
-    if (result.isOk) {
-      allReadings[plant.id] = (result as Ok<List<Reading>>).value;
-    } else {
-      // Handle or log the error for the specific plant
-      allReadings[plant.id] = [];
-    }
+  final net = await ref.watch(networkProvider.future);
+  final svc = ReadingService(net);
+  final out = <String, List<Reading>>{};
+  await Future.wait(plants.map((p) async {
+    final r = await svc.fetchFromJson(p.url);
+    out[p.id] = r is Ok<List<Reading>> ? r.value : const <Reading>[];
   }));
-
-  return allReadings;
+  return out;
 });
