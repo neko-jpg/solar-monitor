@@ -33,10 +33,10 @@ class PlantDetailChart extends StatelessWidget {
           show: true,
           drawVerticalLine: true,
           getDrawingHorizontalLine: (value) {
-            return FlLine(color: theme.dividerColor.withOpacity(0.1), strokeWidth: 1);
+            return FlLine(color: theme.dividerColor.withAlpha((255 * 0.1).round()), strokeWidth: 1);
           },
           getDrawingVerticalLine: (value) {
-            return FlLine(color: theme.dividerColor.withOpacity(0.1), strokeWidth: 1);
+            return FlLine(color: theme.dividerColor.withAlpha((255 * 0.1).round()), strokeWidth: 1);
           },
         ),
         titlesData: FlTitlesData(
@@ -61,7 +61,7 @@ class PlantDetailChart extends StatelessWidget {
         ),
         borderData: FlBorderData(
           show: true,
-          border: Border.all(color: theme.dividerColor.withOpacity(0.2)),
+          border: Border.all(color: theme.dividerColor.withAlpha((255 * 0.2).round())),
         ),
         lineBarsData: [
           LineChartBarData(
@@ -73,7 +73,7 @@ class PlantDetailChart extends StatelessWidget {
             dotData: const FlDotData(show: false),
             belowBarData: BarAreaData(
               show: true,
-              color: theme.primaryColor.withOpacity(0.2),
+              color: theme.primaryColor.withAlpha((255 * 0.2).round()),
             ),
           ),
         ],

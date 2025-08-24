@@ -4,10 +4,13 @@ import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 
 import '../../models/plant.dart';
+import '../../models/reading.dart';
 import '../../providers/plants_provider.dart';
 import '../../providers/reading_provider.dart';
+import '../../providers/notification_settings_provider.dart';
+import '../../widgets/alert_strip.dart';
+import '../../widgets/skeleton_tile.dart';
 import 'widgets/section_header.dart';
-import 'widgets/warning_card.dart';
 
 class DashboardScreen extends ConsumerWidget {
   const DashboardScreen({super.key});
@@ -15,6 +18,7 @@ class DashboardScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final plants = ref.watch(plantsProvider);
+    final alerts = _buildAlerts(ref, plants);
 
     return Scaffold(
       appBar: AppBar(
@@ -30,93 +34,82 @@ class DashboardScreen extends ConsumerWidget {
           ),
         ],
       ),
-      body: plants.isEmpty
-          ? Center(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  const Text('No plants have been added yet.'),
-                  const SizedBox(height: 16),
-                  ElevatedButton.icon(
-                    onPressed: () => context.goNamed('add_plant'),
-                    icon: const Icon(Icons.add),
-                    label: const Text('Add a Plant'),
-                  ),
-                ],
-              ),
-            )
-          : RefreshIndicator(
-              onRefresh: () async {
-                ref.invalidate(plantsProvider);
-                // Also invalidate the readings for all plants
-                for (final plant in plants) {
-                  ref.invalidate(readingsProvider(plant));
-                }
-                return await Future.delayed(const Duration(seconds: 1));
-              },
-              child: ListView(
-                padding: const EdgeInsets.all(16),
-                children: [
-                  // The new Warning Card logic
-                  _DashboardAlerts(plants: plants),
-                  const SectionHeader('My Plants'),
-                  const SizedBox(height: 8),
-                  ...plants.map((p) => _PlantCard(plant: p)),
-                ],
-              ),
-            ),
-    );
-  }
-}
-
-class _DashboardAlerts extends ConsumerWidget {
-  const _DashboardAlerts({required this.plants});
-  final List<Plant> plants;
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final List<String> errorPlants = [];
-    for (final plant in plants) {
-      // Watch each provider's state. hasError is the correct property.
-      final readingAsync = ref.watch(latestReadingProvider(plant));
-      if (readingAsync.hasError) {
-        errorPlants.add(plant.name);
-      }
-    }
-
-    if (errorPlants.isEmpty) {
-      // If no errors, return an empty container.
-      return const SizedBox.shrink();
-    }
-
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 16.0),
-      child: WarningCard(
-        title: 'Connection Issues Detected',
-        message: 'We could not fetch the latest data for the following plants. Please check their configuration or network status.',
-        problematicItems: errorPlants,
-        onRetry: () {
-          // Invalidate the providers for the plants that have errors.
+      body: RefreshIndicator(
+        onRefresh: () async {
+          ref.invalidate(plantsProvider);
+          ref.invalidate(allReadingsProvider);
           for (final plant in plants) {
-            if (errorPlants.contains(plant.name)) {
-              ref.invalidate(readingsProvider(plant));
-            }
+            ref.invalidate(latestReadingProvider(plant));
           }
+          return await Future.delayed(const Duration(seconds: 1));
         },
+        child: ListView(
+          padding: const EdgeInsets.all(16),
+          children: [
+            if (alerts.isNotEmpty) ...[
+              const SectionHeader('Alerts'),
+              const SizedBox(height: 8),
+              ...alerts,
+            ],
+            const SectionHeader('My Plants'),
+            const SizedBox(height: 8),
+            if (plants.isEmpty)
+              const Center(child: Text('No plants have been added yet.'))
+            else
+              ...plants.map((p) {
+                final asyncReading = ref.watch(latestReadingProvider(p));
+                return asyncReading.when(
+                  loading: () => const SkeletonTile(),
+                  error: (e, _) => AlertStrip(
+                    message: 'Failed to get data for ${p.name}: $e',
+                    color: Colors.orange,
+                    onRetry: () => ref.invalidate(latestReadingProvider(p)),
+                  ),
+                  data: (reading) => _PlantCard(plant: p, reading: reading),
+                );
+              }),
+          ],
+        ),
       ),
     );
   }
+
+  List<Widget> _buildAlerts(WidgetRef ref, List<Plant> plants) {
+    final settings = ref.watch(notificationSettingsProvider);
+    if (!settings.enabled) return [];
+
+    final alerts = <Widget>[];
+
+    for (final plant in plants) {
+      final readingAsync = ref.watch(latestReadingProvider(plant));
+      if (readingAsync.hasValue && readingAsync.value != null) {
+        final reading = readingAsync.value!;
+        final now = DateTime.now();
+        if (now.difference(reading.timestamp).inMinutes > settings.staleMinutes) {
+          alerts.add(AlertStrip(
+            message: '${plant.name} has not reported data recently.',
+            color: Colors.orange,
+          ));
+        }
+        if (reading.power < settings.lowPowerKw) {
+          alerts.add(AlertStrip(
+            message: '${plant.name} is reporting low power output.',
+            color: Colors.yellow.shade800,
+          ));
+        }
+      }
+    }
+    return alerts;
+  }
 }
 
-
-class _PlantCard extends ConsumerWidget {
-  const _PlantCard({required this.plant});
+class _PlantCard extends StatelessWidget {
+  const _PlantCard({required this.plant, this.reading});
   final Plant plant;
+  final Reading? reading;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final latestReadingAsync = ref.watch(latestReadingProvider(plant));
-
+  Widget build(BuildContext context) {
     return Card(
       clipBehavior: Clip.antiAlias,
       margin: const EdgeInsets.only(bottom: 12),
@@ -127,11 +120,8 @@ class _PlantCard extends ConsumerWidget {
           child: Row(
             children: [
               Icon(
-                IconData(
-                  int.tryParse(plant.icon) ?? Icons.wb_sunny.codePoint,
-                  fontFamily: 'MaterialIcons',
-                ),
-                color: plant.themeColor,
+                Icons.solar_power,
+                color: Color(plant.color),
                 size: 40,
               ),
               const SizedBox(width: 16),
@@ -144,38 +134,22 @@ class _PlantCard extends ConsumerWidget {
                       style: Theme.of(context).textTheme.titleLarge,
                     ),
                     const SizedBox(height: 4),
-                    latestReadingAsync.when(
-                      data: (reading) {
-                        if (reading == null) {
-                          return const Text(
-                            'No data available.',
-                            style: TextStyle(color: Colors.orange),
-                          );
-                        }
-                        final formattedDate = DateFormat('yyyy/MM/dd HH:mm').format(reading.timestamp);
-                        return Text(
-                          '${reading.power.toStringAsFixed(2)} kW\n$formattedDate',
-                          style: Theme.of(context).textTheme.bodyMedium,
-                        );
-                      },
-                      loading: () => const Row(
-                        children: [
-                          SizedBox(width: 12, height: 12, child: CircularProgressIndicator(strokeWidth: 2)),
-                          SizedBox(width: 8),
-                          Text('Loading...'),
-                        ],
+                    if (reading == null)
+                      const Text(
+                        'No data available.',
+                        style: TextStyle(color: Colors.orange),
+                      )
+                    else ...[
+                      Text(
+                        '${reading!.power.toStringAsFixed(2)} kW',
+                        style: Theme.of(context).textTheme.bodyMedium,
                       ),
-                      error: (err, stack) => Row(
-                        children: [
-                          Icon(Icons.error_outline, color: Theme.of(context).colorScheme.error, size: 16),
-                          const SizedBox(width: 8),
-                          Text(
-                            'Failed to load',
-                            style: TextStyle(color: Theme.of(context).colorScheme.error),
-                          ),
-                        ],
+                      const SizedBox(height: 2),
+                      Text(
+                        DateFormat('yyyy/MM/dd HH:mm').format(reading!.timestamp),
+                        style: Theme.of(context).textTheme.bodySmall,
                       ),
-                    ),
+                    ]
                   ],
                 ),
               ),
