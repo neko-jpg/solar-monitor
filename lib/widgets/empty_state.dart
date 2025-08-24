@@ -1,37 +1,21 @@
 import 'package:flutter/material.dart';
 
 class EmptyState extends StatelessWidget {
-  final String message;
-  final VoidCallback? onAction;
-  final String? actionLabel;
-
-  const EmptyState({
-    super.key,
-    required this.message,
-    this.onAction,
-    this.actionLabel,
-  });
-
+  final String title; final String? subtitle; final Widget? action;
+  const EmptyState({super.key, required this.title, this.subtitle, this.action});
   @override
   Widget build(BuildContext context) {
     return Center(
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(Icons.wb_sunny_outlined, size: 72, color: Colors.grey.shade400),
-          const SizedBox(height: 16),
-          Text(
-            message,
-            style: Theme.of(
-              context,
-            ).textTheme.bodyLarge?.copyWith(color: Colors.grey.shade600),
-            textAlign: TextAlign.center,
-          ),
-          if (onAction != null && actionLabel != null) ...[
-            const SizedBox(height: 16),
-            ElevatedButton(onPressed: onAction, child: Text(actionLabel!)),
+      child: Padding(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(title, style: Theme.of(context).textTheme.titleLarge),
+            if (subtitle!=null) Padding(padding: const EdgeInsets.only(top:8), child: Text(subtitle!)),
+            if (action!=null) Padding(padding: const EdgeInsets.only(top:16), child: action!),
           ],
-        ],
+        ),
       ),
     );
   }

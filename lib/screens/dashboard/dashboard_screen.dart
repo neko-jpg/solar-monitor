@@ -4,7 +4,6 @@ import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 
 import '../../models/plant.dart';
-import '../../models/reading.dart';
 import '../../providers/plants_provider.dart';
 import '../../providers/reading_provider.dart';
 import '../../providers/notification_settings_provider.dart';
@@ -18,145 +17,79 @@ class DashboardScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final plants = ref.watch(plantsProvider);
-    final alerts = _buildAlerts(ref, plants);
+    final alerts = _buildAlerts(context, ref, plants);
 
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Dashboard'),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.add),
-            onPressed: () => context.goNamed('add_plant'),
-          ),
-          IconButton(
-            icon: const Icon(Icons.settings_outlined),
-            onPressed: () => context.goNamed('notifications'),
-          ),
+      appBar: AppBar(title: const Text('SolarTrack')),
+      body: ListView(
+        padding: const EdgeInsets.all(16),
+        children: [
+          if (alerts.isNotEmpty) ...alerts,
+          const SectionHeader('Plants'),
+          if (plants.isEmpty) const Text('プラントを追加してください'),
+          ...plants.map((p) => _PlantTile(plant: p)),
         ],
       ),
-      body: RefreshIndicator(
-        onRefresh: () async {
-          ref.invalidate(plantsProvider);
-          ref.invalidate(allReadingsProvider);
-          for (final plant in plants) {
-            ref.invalidate(latestReadingProvider(plant));
-          }
-          return await Future.delayed(const Duration(seconds: 1));
-        },
-        child: ListView(
-          padding: const EdgeInsets.all(16),
-          children: [
-            if (alerts.isNotEmpty) ...[
-              const SectionHeader('Alerts'),
-              const SizedBox(height: 8),
-              ...alerts,
-            ],
-            const SectionHeader('My Plants'),
-            const SizedBox(height: 8),
-            if (plants.isEmpty)
-              const Center(child: Text('No plants have been added yet.'))
-            else
-              ...plants.map((p) {
-                final asyncReading = ref.watch(latestReadingProvider(p));
-                return asyncReading.when(
-                  loading: () => const SkeletonTile(),
-                  error: (e, _) => AlertStrip(
-                    message: 'Failed to get data for ${p.name}: $e',
-                    color: Colors.orange,
-                    onRetry: () => ref.invalidate(latestReadingProvider(p)),
-                  ),
-                  data: (reading) => _PlantCard(plant: p, reading: reading),
-                );
-              }),
-          ],
-        ),
+      floatingActionButton: FloatingActionButton(
+        onPressed: () => context.goNamed('plant_edit'),
+        child: const Icon(Icons.add),
       ),
     );
   }
 
-  List<Widget> _buildAlerts(WidgetRef ref, List<Plant> plants) {
-    final settings = ref.watch(notificationSettingsProvider);
-    if (!settings.enabled) return [];
-
+  List<Widget> _buildAlerts(BuildContext context, WidgetRef ref, List<Plant> plants) {
+    final st = ref.watch(notificationSettingsProvider);
+    final now = DateTime.now();
     final alerts = <Widget>[];
 
-    for (final plant in plants) {
-      final readingAsync = ref.watch(latestReadingProvider(plant));
-      if (readingAsync.hasValue && readingAsync.value != null) {
-        final reading = readingAsync.value!;
-        final now = DateTime.now();
-        if (now.difference(reading.timestamp).inMinutes > settings.staleMinutes) {
-          alerts.add(AlertStrip(
-            message: '${plant.name} has not reported data recently.',
-            color: Colors.orange,
+    for (final p in plants) {
+      final async = ref.watch(latestReadingProvider(p));
+      async.whenData((r) {
+        if (!st.enabled) return;
+        if (r == null) {
+          alerts.add(AlertStrip(message: '${p.name}: 取得失敗', color: Colors.orange,
+            onRetry: () => ref.invalidate(latestReadingProvider(p)),
+          ));
+          return;
+        }
+        final stale = now.difference(r.timestamp).inMinutes >= st.staleMinutes;
+        if (stale) {
+          alerts.add(AlertStrip(message: '${p.name}: 未更新 ${now.difference(r.timestamp).inMinutes}分', color: Colors.orange,
+            onRetry: () => ref.invalidate(latestReadingProvider(p)),
           ));
         }
-        if (reading.power < settings.lowPowerKw) {
-          alerts.add(AlertStrip(
-            message: '${plant.name} is reporting low power output.',
-            color: Colors.yellow.shade800,
+        if (r.power <= st.lowPowerKw) {
+          alerts.add(AlertStrip(message: '${p.name}: 低出力 ${r.power.toStringAsFixed(1)}kW', color: Colors.redAccent,
+            onRetry: () => ref.invalidate(latestReadingProvider(p)),
           ));
         }
-      }
+      });
     }
     return alerts;
   }
 }
 
-class _PlantCard extends StatelessWidget {
-  const _PlantCard({required this.plant, this.reading});
+class _PlantTile extends ConsumerWidget {
   final Plant plant;
-  final Reading? reading;
-
+  const _PlantTile({required this.plant});
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final async = ref.watch(latestReadingProvider(plant));
     return Card(
-      clipBehavior: Clip.antiAlias,
-      margin: const EdgeInsets.only(bottom: 12),
-      child: InkWell(
-        onTap: () => context.go('/plant/${plant.id}'),
-        child: Padding(
-          padding: const EdgeInsets.all(16.0),
-          child: Row(
-            children: [
-              Icon(
-                Icons.solar_power,
-                color: Color(plant.color),
-                size: 40,
-              ),
-              const SizedBox(width: 16),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      plant.name,
-                      style: Theme.of(context).textTheme.titleLarge,
-                    ),
-                    const SizedBox(height: 4),
-                    if (reading == null)
-                      const Text(
-                        'No data available.',
-                        style: TextStyle(color: Colors.orange),
-                      )
-                    else ...[
-                      Text(
-                        '${reading!.power.toStringAsFixed(2)} kW',
-                        style: Theme.of(context).textTheme.bodyMedium,
-                      ),
-                      const SizedBox(height: 2),
-                      Text(
-                        DateFormat('yyyy/MM/dd HH:mm').format(reading!.timestamp),
-                        style: Theme.of(context).textTheme.bodySmall,
-                      ),
-                    ]
-                  ],
-                ),
-              ),
-              const Icon(Icons.chevron_right),
-            ],
-          ),
+      child: ListTile(
+        onTap: () => context.goNamed('plant_detail', pathParameters: {'plantId': plant.id}),
+        leading: CircleAvatar(backgroundColor: Color(plant.color)),
+        title: Text(plant.name),
+        subtitle: async.when(
+          loading: () => const SkeletonTile(),
+          error: (e, _) => Text('取得失敗: $e'),
+          data: (r) {
+            if (r == null) return const Text('データなし');
+            final time = DateFormat('MM/dd HH:mm').format(r.timestamp);
+            return Text('${r.power.toStringAsFixed(1)} kW  ·  $time');
+          },
         ),
+        trailing: const Icon(Icons.chevron_right),
       ),
     );
   }
