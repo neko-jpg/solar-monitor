@@ -4,7 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 // Network（接続テスト用）
-import 'package:flutter_application_1/services/network/default_network_service.dart';
+import '../../services/network/default_network_service.dart';
 import '../../services/network/network_service.dart';
 
 // App layers

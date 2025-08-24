@@ -5,7 +5,7 @@ plugins {
 }
 
 android {
-    namespace = "com.example.flutter_application_1"
+    namespace = "com.example.solartrack"
     compileSdk = flutter.compileSdkVersion
     
     // NDKバージョンの警告を修正
@@ -27,9 +27,9 @@ android {
     }
 
     defaultConfig {
-        applicationId = "com.example.flutter_application_1"
+        applicationId = "com.example.solartrack"
         // minSdkエラーを修正
-        minSdk = 21
+        minSdkVersion(flutter.minSdkVersion)
         targetSdk = flutter.targetSdkVersion
         versionCode = flutter.versionCode
         versionName = flutter.versionName

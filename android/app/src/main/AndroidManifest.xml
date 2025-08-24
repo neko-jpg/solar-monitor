@@ -2,7 +2,7 @@
     <!-- インターネット通信許可 -->
     <uses-permission android:name="android.permission.INTERNET"/>
     <application
-        android:label="flutter_application_1"
+        android:label="SolarTrack"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher"
         android:usesCleartextTraffic="true">
