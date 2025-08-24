@@ -6,43 +6,80 @@ import '../../../utils/aggregation.dart';
 
 class TotalGenerationChart extends ConsumerWidget {
   const TotalGenerationChart({super.key});
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final async = ref.watch(allReadingsProvider);
     return async.when(
-      loading: ()=> const Center(child: CircularProgressIndicator()),
-      error: (e,_)=>(Center(child: Text('取得失敗'))),
-      data: (byPlant){
+      loading: () => const Center(child: CircularProgressIndicator()),
+      error: (e, _) => const Center(child: Text('取得失敗')),
+      data: (byPlant) {
         final daily = aggregateDaily(byPlant); // List<MapEntry<DateTime,double>>
-        if (daily.isEmpty) return const SizedBox(height: 220, child: Center(child: Text('データなし')));
-        final spots = <FlSpot>[];
-        for (var i=0;i<daily.length;i++) {
-          final d = daily[i];
-          spots.add(FlSpot(i.toDouble(), d.value));
+        if (daily.isEmpty) {
+          return const Center(child: Text('データがありません'));
         }
-        return SizedBox(
-          height: 260,
-          child: LineChart(LineChartData(
-            minX: 0, maxX: (spots.length-1).toDouble(),
+
+        final spots = <FlSpot>[];
+        for (var i = 0; i < daily.length; i++) {
+          spots.add(FlSpot(i.toDouble(), daily[i].value));
+        }
+
+        int labelStep() {
+          if (daily.length <= 7) return 1;
+          if (daily.length <= 14) return 2;
+          if (daily.length <= 30) return 3;
+          return 5;
+        }
+
+        return LineChart(
+          LineChartData(
+            minY: 0,
+            lineTouchData: const LineTouchData(enabled: true),
+            gridData: const FlGridData(show: true),
+            borderData: FlBorderData(show: true),
             lineBarsData: [
               LineChartBarData(
-                spots: spots,
                 isCurved: true,
-                barWidth: 2,
-              )
+                preventCurveOverShooting: true,
+                spots: spots,
+                dotData: const FlDotData(show: false),
+              ),
             ],
-            gridData: const FlGridData(show: false),
             titlesData: FlTitlesData(
-              leftTitles: const AxisTitles(sideTitles: SideTitles(showTitles: true, reservedSize: 42)),
-              rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
-              topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
-              bottomTitles: AxisTitles(sideTitles: SideTitles(showTitles: true, getTitlesWidget: (v, meta){
-                final idx = v.toInt(); if (idx<0 || idx>=daily.length) return const SizedBox.shrink();
-                final d = daily[idx].key; return Padding(padding: const EdgeInsets.only(top:6), child: Text('${d.month}/${d.day}', style: const TextStyle(fontSize: 11)));
-              })),
-          )),
+              leftTitles: const AxisTitles(
+                sideTitles: SideTitles(showTitles: true, reservedSize: 42),
+              ),
+              rightTitles: const AxisTitles(
+                sideTitles: SideTitles(showTitles: false),
+              ),
+              topTitles: const AxisTitles(
+                sideTitles: SideTitles(showTitles: false),
+              ),
+              bottomTitles: AxisTitles(
+                sideTitles: SideTitles(
+                  showTitles: true,
+                  getTitlesWidget: (v, meta) {
+                    final idx = v.toInt();
+                    if (idx < 0 || idx >= daily.length) {
+                      return const SizedBox.shrink();
+                    }
+                    if (idx % labelStep() != 0) {
+                      return const SizedBox.shrink();
+                    }
+                    final d = daily[idx].key;
+                    return Padding(
+                      padding: const EdgeInsets.only(top: 4.0),
+                      child: Text('${d.month}/${d.day}',
+                          style: const TextStyle(fontSize: 11)),
+                    );
+                  },
+                ),
+              ),
+            ),
+          ),
         );
       },
     );
   }
 }
+

@@ -39,7 +39,6 @@ class _PlantAddEditScreenState extends ConsumerState<PlantAddEditScreen> {
   IconData icon = Icons.wb_sunny_rounded;
 
   _ConnState conn = _ConnState.idle;
-  String? connMsg;
 
   bool get isEdit => widget.plantId != null;
 
@@ -186,17 +185,6 @@ class _PlantAddEditScreenState extends ConsumerState<PlantAddEditScreen> {
                     }),
                   ),
                   const SizedBox(height: 8),
-                  if (connMsg != null)
-                    Text(
-                      connMsg!,
-                      style: TextStyle(
-                        color: switch (conn) {
-                          _ConnState.ok => Colors.green,
-                          _ConnState.ng => Colors.red,
-                          _ => Colors.grey,
-                        },
-                      ),
-                    ),
                 ],
               ),
             ),
@@ -220,38 +208,40 @@ class _PlantAddEditScreenState extends ConsumerState<PlantAddEditScreen> {
   }
 
   Future<void> _testConnection() async {
-    FocusScope.of(context).unfocus();
     if (!(_formKey1.currentState?.validate() ?? false) ||
         !(_formKey2.currentState?.validate() ?? false)) {
       _toast('Please fill in all URL and credential fields first.');
       return;
     }
 
-    setState(() {
-      conn = _ConnState.testing;
-      connMsg = null;
-    });
+    setState(() => conn = _ConnState.testing);
+    try {
+      final url = Uri.parse(urlC.text.trim());
+      final username = userC.text.trim();
+      final password = passC.text;
 
-    final url = Uri.parse(urlC.text.trim());
-    final username = userC.text.trim();
-    final password = passC.text;
+      final net = await ref.read(networkProvider.future);
+      final result = await Result.guard(() => net.login(url, username, password));
 
-    // Get the network service
-    final net = await ref.read(networkProvider.future);
+      if (!mounted) return;
 
-    // Use the new login method for the connection test
-    final result = await Result.guard(() => net.login(url, username, password));
+      setState(() {
+        conn = result.isOk ? _ConnState.ok : _ConnState.ng;
+      });
 
-    if (!mounted) return;
-
-    setState(() {
-      conn = result.isOk ? _ConnState.ok : _ConnState.ng;
-      connMsg = switch (result) {
-        Ok() => 'Login successful!',
-        Err(error: final e) => e.toString(),
-      };
-      _toast(connMsg!);
-    });
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(result.isOk ? '接続に成功しました' : '接続に失敗しました'),
+        ),
+      );
+    } catch (_) {
+      if (!mounted) return;
+      setState(() => conn = _ConnState.ng);
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('接続テスト中にエラーが発生しました')),
+      );
+    }
   }
 
   Future<void> _save() async {
