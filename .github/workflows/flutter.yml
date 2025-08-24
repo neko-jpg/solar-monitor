@@ -8,6 +8,7 @@ jobs:
       - uses: subosito/flutter-action@v2
         with: { channel: 'stable' }
       - run: flutter pub get
+      - run: dart fix --apply
       - run: flutter analyze
       - run: flutter test --no-pub
-      - run: flutter build apk --release --no-tree-shake-icons
+      - run: flutter build apk --release

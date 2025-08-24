@@ -25,7 +25,7 @@ class NotificationSettingsScreen extends ConsumerWidget {
             trailing: Text('${settings.staleMinutes}'),
             onTap: () async {
               final v = await _pickInt(context, settings.staleMinutes, 5, 240, step: 5);
-              if (v != null) notifier.setStaleMinutes(v);
+              if (v != null) notifier.setStale(v);
             },
           ),
           ListTile(
@@ -33,7 +33,7 @@ class NotificationSettingsScreen extends ConsumerWidget {
             trailing: Text(settings.lowPowerKw.toStringAsFixed(1)),
             onTap: () async {
               final v = await _pickDouble(context, settings.lowPowerKw, 0, 10, step: 0.1);
-              if (v != null) notifier.setLowPower(v);
+              if (v != null) notifier.setLow(v);
             },
           ),
         ],

@@ -3,7 +3,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../../models/plant.dart';
 
 class PlantPrefs {
-  static const _key = 'plants_v1';
+  static const _key = 'plants_v2';
   Future<List<Plant>> load() async {
     final sp = await SharedPreferences.getInstance();
     final raw = sp.getString(_key);

@@ -69,7 +69,7 @@ class PlantDetailScreen extends ConsumerWidget {
   }
 
   void _confirmDelete(BuildContext context, WidgetRef ref, Plant plant) {
-    showDialog(
+    showDialog<void>(
       context: context,
       builder: (_) => AlertDialog(
         title: const Text('Delete Plant'),

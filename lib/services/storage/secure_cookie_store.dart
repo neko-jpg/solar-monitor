@@ -4,7 +4,6 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 class SecureCookieStore {
   final _store = const FlutterSecureStorage();
   String _key(String host) => 'cookie_$host';
-
   Future<void> save(String host, Map<String, String> cookies) async {
     await _store.write(key: _key(host), value: jsonEncode(cookies));
   }
