@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import '../../core/constants.dart';
 import '../../providers/notification_settings_provider.dart';
 
 class NotificationSettingsScreen extends ConsumerWidget {
@@ -8,178 +7,84 @@ class NotificationSettingsScreen extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final s = ref.watch(notificationSettingsProvider);
-    final n = ref.read(notificationSettingsProvider.notifier);
+    final settings = ref.watch(notificationSettingsProvider);
+    final notifier = ref.read(notificationSettingsProvider.notifier);
 
     return Scaffold(
       appBar: AppBar(title: const Text('Notification Settings')),
-      backgroundColor: const Color(0xFFF6F7FB),
       body: ListView(
-        padding: const EdgeInsets.only(bottom: 24),
+        padding: const EdgeInsets.all(16),
         children: [
-          _Card(
-            title: 'Regular Updates',
-            subtitle: 'At a specified time each day',
-            trailing: Switch(value: s.dailySummary, onChanged: n.toggleDaily),
-            child:
-                s.dailySummary
-                    ? _TimeChips(
-                      times: s.times,
-                      onAdd: (t) => n.addTime(t),
-                      onRemove: (i) => n.removeTime(i),
-                    )
-                    : null,
+          SwitchListTile(
+            title: const Text('Enable Notifications'),
+            value: settings.enabled,
+            onChanged: notifier.toggle,
           ),
-          _Card(
-            title: 'Alert Notifications',
-            subtitle: 'When generation is below threshold',
-            trailing: Switch(
-              value: s.abnormalAlert,
-              onChanged: n.toggleAbnormal,
-            ),
-            child:
-                s.abnormalAlert
-                    ? _NumberField(
-                      hint: '50 kW',
-                      initial:
-                          s.thresholdKw == 0
-                              ? ''
-                              : s.thresholdKw.toStringAsFixed(0),
-                      onChanged: (v) => n.setThreshold(double.tryParse(v) ?? 0),
-                    )
-                    : null,
+          ListTile(
+            title: const Text('Warn if no update for (minutes)'),
+            trailing: Text('${settings.staleMinutes}'),
+            onTap: () async {
+              final v = await _pickInt(context, settings.staleMinutes, 5, 240, step: 5);
+              if (v != null) notifier.setStaleMinutes(v);
+            },
           ),
-          _Card(
-            title: 'Peak Generation',
-            subtitle: 'When new peak value is reached',
-            trailing: Switch(value: s.maxUpdate, onChanged: n.toggleMaxUpdate),
+          ListTile(
+            title: const Text('Low power threshold (kW)'),
+            trailing: Text(settings.lowPowerKw.toStringAsFixed(1)),
+            onTap: () async {
+              final v = await _pickDouble(context, settings.lowPowerKw, 0, 10, step: 0.1);
+              if (v != null) notifier.setLowPower(v);
+            },
           ),
         ],
       ),
     );
   }
-}
 
-class _Card extends StatelessWidget {
-  final String title;
-  final String? subtitle;
-  final Widget? trailing;
-  final Widget? child;
-  const _Card({required this.title, this.subtitle, this.trailing, this.child});
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      margin: const EdgeInsets.fromLTRB(16, 12, 16, 0),
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        boxShadow: AppTok.shadow,
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
+  Future<int?> _pickInt(BuildContext ctx, int init, int min, int max, {int step = 1}) async {
+    int cur = init;
+    return showDialog<int>(
+      context: ctx,
+      builder: (_) => AlertDialog(
+        title: const Text('Set minute threshold'),
+        content: StatefulBuilder(
+          builder: (_, set) => Row(
+            mainAxisAlignment: MainAxisAlignment.spaceEvenly,
             children: [
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      title,
-                      style: const TextStyle(
-                        fontWeight: FontWeight.w700,
-                        fontSize: 16,
-                      ),
-                    ),
-                    if (subtitle != null)
-                      Padding(
-                        padding: const EdgeInsets.only(top: 4),
-                        child: Text(
-                          subtitle!,
-                          style: const TextStyle(color: Colors.black54),
-                        ),
-                      ),
-                  ],
-                ),
-              ),
-              if (trailing != null) trailing!,
+              IconButton(icon: const Icon(Icons.remove), onPressed: () => set(() => cur = (cur - step).clamp(min, max))),
+              Text('$cur', style: Theme.of(ctx).textTheme.titleLarge),
+              IconButton(icon: const Icon(Icons.add), onPressed: () => set(() => cur = (cur + step).clamp(min, max))),
             ],
           ),
-          if (child != null)
-            Padding(padding: const EdgeInsets.only(top: 12), child: child!),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
+          ElevatedButton(onPressed: () => Navigator.pop(ctx, cur), child: const Text('OK')),
         ],
       ),
     );
   }
-}
 
-class _TimeChips extends StatelessWidget {
-  final List<TimeOfDay> times;
-  final void Function(TimeOfDay) onAdd;
-  final void Function(int) onRemove;
-  const _TimeChips({
-    required this.times,
-    required this.onAdd,
-    required this.onRemove,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Wrap(
-      spacing: 8,
-      runSpacing: 8,
-      children: [
-        for (int i = 0; i < times.length; i++)
-          Chip(
-            label: Text(times[i].format(context)),
-            onDeleted: () => onRemove(i),
+  Future<double?> _pickDouble(BuildContext ctx, double init, double min, double max, {double step = 0.1}) async {
+    double cur = init;
+    return showDialog<double>(
+      context: ctx,
+      builder: (_) => AlertDialog(
+        title: const Text('Set kW threshold'),
+        content: StatefulBuilder(
+          builder: (_, set) => Row(
+            mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+            children: [
+              IconButton(icon: const Icon(Icons.remove), onPressed: () => set(() => cur = (cur - step).clamp(min, max))),
+              Text(cur.toStringAsFixed(1), style: Theme.of(ctx).textTheme.titleLarge),
+              IconButton(icon: const Icon(Icons.add), onPressed: () => set(() => cur = (cur + step).clamp(min, max))),
+            ],
           ),
-        ActionChip(
-          label: const Text('Add time'),
-          onPressed: () async {
-            final picked = await showTimePicker(
-              context: context,
-              initialTime: TimeOfDay.now(),
-            );
-            if (picked != null) onAdd(picked);
-          },
         ),
-      ],
-    );
-  }
-}
-
-class _NumberField extends StatelessWidget {
-  final String hint;
-  final String initial;
-  final ValueChanged<String> onChanged;
-  const _NumberField({
-    required this.hint,
-    required this.initial,
-    required this.onChanged,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final controller = TextEditingController(text: initial);
-    return TextField(
-      controller: controller,
-      keyboardType: TextInputType.number,
-      onChanged: onChanged,
-      decoration: InputDecoration(
-        hintText: hint,
-        filled: true,
-        fillColor: const Color(0xFFF6F7FB),
-        contentPadding: const EdgeInsets.symmetric(
-          horizontal: 12,
-          vertical: 12,
-        ),
-        border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
-          borderSide: BorderSide.none,
-        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
+          ElevatedButton(onPressed: () => Navigator.pop(ctx, cur), child: const Text('OK')),
+        ],
       ),
     );
   }

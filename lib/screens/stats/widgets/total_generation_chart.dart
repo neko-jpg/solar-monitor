@@ -1,98 +1,94 @@
 import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
-import '../../../models/plant.dart';
+import 'package:intl/intl.dart';
+
+import '../../../models/reading.dart';
+import '../../../utils/aggregation.dart';
 
 class TotalGenerationChart extends StatelessWidget {
-  final List<Plant> plants;
-  const TotalGenerationChart({super.key, required this.plants});
+  final List<Reading> readings;
+  const TotalGenerationChart({super.key, required this.readings});
 
   @override
   Widget build(BuildContext context) {
-    if (plants.isEmpty) {
-      return const SizedBox(height: 220, child: Center(child: Text('No data')));
+    if (readings.isEmpty) {
+      return const Center(child: Text('No data to display.'));
     }
 
-    // 各時点の合計を作成（全プラントの同じインデックスを足す）
-    final len = plants.first.readings.length;
-    final totals = List<double>.filled(len, 0);
-    for (final p in plants) {
-      for (var i = 0; i < len && i < p.readings.length; i++) {
-        totals[i] += p.readings[i].power;
-      }
+    // Aggregate the combined readings into daily time points
+    final dailyData = aggregateDaily(readings);
+    if (dailyData.isEmpty) {
+      return const Center(child: Text('Not enough data to display a chart.'));
     }
 
-    final spots = [
-      for (var i = 0; i < totals.length; i++) FlSpot(i.toDouble(), totals[i]),
-    ];
+    final spots = dailyData.map((p) => FlSpot(p.t.millisecondsSinceEpoch.toDouble(), p.v)).toList();
+    final theme = Theme.of(context);
 
-    return SizedBox(
-      height: 220,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Text(
-            'Total Generation',
-            style: TextStyle(fontWeight: FontWeight.w700),
+    return LineChart(
+      LineChartData(
+        minY: 0,
+        gridData: FlGridData(
+          show: true,
+          drawVerticalLine: true,
+          getDrawingHorizontalLine: (value) {
+            return FlLine(color: theme.dividerColor.withOpacity(0.1), strokeWidth: 1);
+          },
+          getDrawingVerticalLine: (value) {
+            return FlLine(color: theme.dividerColor.withOpacity(0.1), strokeWidth: 1);
+          },
+        ),
+        titlesData: FlTitlesData(
+          show: true,
+          rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+          topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+          bottomTitles: AxisTitles(
+            sideTitles: SideTitles(
+              showTitles: true,
+              reservedSize: 30,
+              getTitlesWidget: (value, meta) {
+                final timestamp = DateTime.fromMillisecondsSinceEpoch(value.toInt());
+                return SideTitleWidget(
+                  axisSide: meta.axisSide,
+                  space: 8.0,
+                  child: Text(DateFormat.Md().format(timestamp), style: const TextStyle(fontSize: 10)),
+                );
+              },
+            ),
           ),
-          const SizedBox(height: 8),
-          Expanded(
-            child: LineChart(
-              LineChartData(
-                gridData: FlGridData(
-                  show: true,
-                  horizontalInterval: _niceStep(totals),
-                ),
-                titlesData: FlTitlesData(
-                  leftTitles: AxisTitles(
-                    sideTitles: SideTitles(showTitles: true, reservedSize: 36),
-                  ),
-                  bottomTitles: AxisTitles(
-                    sideTitles: SideTitles(showTitles: true),
-                  ),
-                  topTitles: const AxisTitles(
-                    sideTitles: SideTitles(showTitles: false),
-                  ),
-                  rightTitles: const AxisTitles(
-                    sideTitles: SideTitles(showTitles: false),
-                  ),
-                ),
-                borderData: FlBorderData(show: false),
-                lineBarsData: [
-                  LineChartBarData(
-                    isCurved: true,
-                    spots: spots,
-                    barWidth: 2.5,
-                    dotData: const FlDotData(show: false),
-                    belowBarData: BarAreaData(
-                      show: true,
-                      gradient: LinearGradient(
-                        colors: [
-                          Theme.of(
-                            context,
-                          ).colorScheme.primary.withOpacity(0.28),
-                          Theme.of(
-                            context,
-                          ).colorScheme.primary.withOpacity(0.04),
-                        ],
-                        begin: Alignment.topCenter,
-                        end: Alignment.bottomCenter,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
+          leftTitles: AxisTitles(
+            sideTitles: SideTitles(
+              showTitles: true,
+              reservedSize: 42,
+              getTitlesWidget: (value, meta) {
+                if (value == meta.max || value == meta.min) return Container();
+                return SideTitleWidget(
+                  axisSide: meta.axisSide,
+                  space: 8.0,
+                  child: Text('${value.toStringAsFixed(1)}kW', style: const TextStyle(fontSize: 10)),
+                );
+              },
+            ),
+          ),
+        ),
+        borderData: FlBorderData(
+          show: true,
+          border: Border.all(color: theme.dividerColor.withOpacity(0.2)),
+        ),
+        lineBarsData: [
+          LineChartBarData(
+            spots: spots,
+            isCurved: true,
+            color: theme.primaryColor,
+            barWidth: 3,
+            isStrokeCapRound: true,
+            dotData: const FlDotData(show: false),
+            belowBarData: BarAreaData(
+              show: true,
+              color: theme.primaryColor.withOpacity(0.2),
             ),
           ),
         ],
       ),
     );
-  }
-
-  double _niceStep(List<double> values) {
-    final max = values.fold<double>(0, (m, v) => v > m ? v : m);
-    if (max <= 0) return 20;
-    final rough = max / 5;
-    // 5の倍数に丸め
-    return (rough / 10).ceil() * 10.0;
   }
 }

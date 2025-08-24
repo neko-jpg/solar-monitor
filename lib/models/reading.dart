@@ -1,41 +1,23 @@
-// lib/models/reading.dart
-import 'package:equatable/equatable.dart';
-
-/// 1点の計測値（時刻＋出力[kW]）
-class Reading extends Equatable {
+class Reading {
   final DateTime timestamp;
   final double power;
+  final double? energyKwh; // Cumulative energy, optional
 
-  const Reading({required this.timestamp, required this.power});
+  const Reading({
+    required this.timestamp,
+    required this.power,
+    this.energyKwh,
+  });
 
-  Reading copyWith({DateTime? timestamp, double? power}) => Reading(
-    timestamp: timestamp ?? this.timestamp,
-    power: power ?? this.power,
-  );
-
-  /// JSON → Reading
-  /// timestamp: ISO8601 文字列 or int(ミリ秒) の両対応
-  factory Reading.fromJson(Map<String, dynamic> j) {
-    final ts = j['timestamp'];
-    final DateTime t = switch (ts) {
-      int ms => DateTime.fromMillisecondsSinceEpoch(ms),
-      String s => DateTime.parse(s),
-      _ => throw ArgumentError('Invalid timestamp: $ts'),
-    };
-    final p = (j['power'] as num).toDouble();
-    return Reading(timestamp: t, power: p);
-  }
-
-  /// Reading → JSON（ISO8601）
   Map<String, dynamic> toJson() => {
-    'timestamp': timestamp.toIso8601String(),
-    'power': power,
-  };
+        'timestamp': timestamp.toIso8601String(),
+        'power': power,
+        'energyKwh': energyKwh,
+      };
 
-  /// 並べ替え用：時刻昇順（古い→新しい）
-  static int compareByTimeAsc(Reading a, Reading b) =>
-      a.timestamp.compareTo(b.timestamp);
-
-  @override
-  List<Object?> get props => [timestamp, power];
+  static Reading fromJson(Map<String, dynamic> json) => Reading(
+        timestamp: DateTime.parse(json['timestamp'] as String),
+        power: (json['power'] as num).toDouble(),
+        energyKwh: (json['energyKwh'] as num?)?.toDouble(),
+      );
 }
