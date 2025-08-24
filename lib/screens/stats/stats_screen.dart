@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../providers/plants_provider.dart';
-import '../../providers/stats/all_readings_provider.dart';
+import '../../providers/reading_provider.dart';
 import 'widgets/generation_by_plant_chart.dart';
 import 'widgets/total_generation_chart.dart';
 

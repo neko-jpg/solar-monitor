@@ -1,39 +1,38 @@
 import '../../core/exceptions.dart';
 import '../../core/result.dart';
-import '../../models/plant.dart';
 import '../../models/reading.dart';
-import '../network/default_network_service.dart';
+import '../network/network_service.dart';
 
-class ReadingService {
-  final DefaultNetworkService _net;
+abstract class IReadingService {
+  Future<Result<List<Reading>>> fetchFromJson(Uri endpoint);
+  Future<Result<List<Reading>>> fetchFromCsv(Uri endpoint);
+}
+
+class ReadingService implements IReadingService {
+  final NetworkService _net;
   ReadingService(this._net);
 
-  /// Attempts to log in using the plant's credentials.
-  Future<Result<void>> login(Plant plant) async {
+  @override
+  Future<Result<List<Reading>>> fetchFromJson(Uri endpoint) async {
     try {
-      final uri = Uri.parse(plant.url);
-      await _net.login(uri, plant.username, plant.password);
-      return const Ok(null); // Return Ok on success
-    } on AppException catch (e) {
-      return Err(e);
+      final response = await _net.getJson<Map<String, dynamic>>(endpoint);
+      final list = (response.data?['readings'] as List<dynamic>?)?.cast<Map<String, dynamic>>() ?? [];
+      final readings = list.map((json) => Reading.fromJson(json)).toList();
+      // Ensure readings are sorted by timestamp
+      readings.sort((a, b) => a.timestamp.compareTo(b.timestamp));
+      return Ok(readings);
+    } on AppException {
+      rethrow;
+    } catch (e) {
+      // Log the error s
+      return Err(AppException(AppExceptionKind.parse, 'Failed to parse JSON readings.', e));
     }
   }
 
-  /// Fetches a list of readings for a given plant.
-  /// It now uses the simpler `get` method from the network service.
-  Future<Result<List<Reading>>> fetchReadings(Plant plant) async {
-    try {
-      final uri = Uri.parse(plant.url);
-      final response = await _net.get<List<dynamic>>(uri);
-
-      final list = response.data?.cast<Map<String, dynamic>>() ?? [];
-      final readings = list.map((json) => Reading.fromJson(json)).toList();
-
-      return Ok(readings);
-    } on AppException catch (e) {
-      return Err(e);
-    } catch (e) {
-      return Err(ParseException('Failed to parse readings data.'));
-    }
+  @override
+  Future<Result<List<Reading>>> fetchFromCsv(Uri endpoint) async {
+    // TODO: Implement CSV parsing
+    await Future.delayed(const Duration(seconds: 1));
+    return Err(AppException(AppExceptionKind.unknown, 'CSV parsing not implemented yet.'));
   }
 }

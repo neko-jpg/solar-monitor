@@ -4,11 +4,11 @@ import 'package:go_router/go_router.dart';
 
 // App layers
 import '../../providers/plants_provider.dart';
-import '../../providers/reading_provider.dart';
 import '../../models/plant.dart';
 import '../../core/constants.dart';
 import '../../core/result.dart';
-import '../../services/reading/reading_service.dart';
+import '../../providers/reading_provider.dart';
+
 
 // Step widgets
 import 'widgets/step_url_input.dart';
@@ -58,15 +58,12 @@ class _PlantAddEditScreenState extends ConsumerState<PlantAddEditScreen> {
     if (isEdit && !_initialized) {
       final p = ref.read(plantsProvider.notifier).find(widget.plantId!);
       if (p != null) {
-        urlC.text = p.url;
-        userC.text = p.username;
-        passC.text = p.password;
+        urlC.text = p.url.toString();
+        // Credentials are not stored in the plant model anymore.
+        // The user will have to re-enter them if a session expires.
         nameC.text = p.name;
-        themeColor = p.themeColor;
-        icon = IconData(
-          int.tryParse(p.icon) ?? Icons.wb_sunny_rounded.codePoint,
-          fontFamily: 'MaterialIcons',
-        );
+        themeColor = Color(p.color);
+        // icon is not part of the plant model anymore
         _initialized = true;
       }
     }
@@ -235,20 +232,15 @@ class _PlantAddEditScreenState extends ConsumerState<PlantAddEditScreen> {
       connMsg = null;
     });
 
-    final tempPlant = Plant(
-      id: 'test', name: 'test',
-      url: urlC.text.trim(),
-      username: userC.text.trim(),
-      password: passC.text,
-      themeColor: Colors.transparent, icon: '',
-    );
+    final url = Uri.parse(urlC.text.trim());
+    final username = userC.text.trim();
+    final password = passC.text;
 
-    // Get the network service and create a reading service instance
-    final net = await ref.read(networkServiceProvider.future);
-    final readingService = ReadingService(net);
+    // Get the network service
+    final net = await ref.read(networkProvider.future);
 
     // Use the new login method for the connection test
-    final result = await readingService.login(tempPlant);
+    final result = await Result.guard(() => net.login(url, username, password));
 
     if (!mounted) return;
 
@@ -273,14 +265,26 @@ class _PlantAddEditScreenState extends ConsumerState<PlantAddEditScreen> {
       return;
     }
 
+    final url = Uri.parse(urlC.text.trim());
+
+    // If this is a new plant, we should test the connection and log in
+    // to establish a session before saving.
+    if (!isEdit) {
+      final username = userC.text.trim();
+      final password = passC.text;
+      final net = await ref.read(networkProvider.future);
+      final loginResult = await Result.guard(() => net.login(url, username, password));
+      if (loginResult.isErr) {
+        _toast('Connection failed. Please check credentials and URL.');
+        return;
+      }
+    }
+
     final p = Plant(
       id: widget.plantId ?? DateTime.now().millisecondsSinceEpoch.toString(),
       name: name,
-      url: urlC.text.trim(),
-      username: userC.text.trim(),
-      password: passC.text,
-      themeColor: themeColor,
-      icon: icon.codePoint.toString(),
+      url: url,
+      color: themeColor.value,
     );
 
     final notifier = ref.read(plantsProvider.notifier);

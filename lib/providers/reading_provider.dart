@@ -2,52 +2,51 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../models/plant.dart';
 import '../models/reading.dart';
 import '../services/network/default_network_service.dart';
+import '../services/network/network_service.dart';
 import '../services/reading/reading_service.dart';
 import '../core/result.dart';
+import 'plants_provider.dart';
 
-// Provider for the core network service.
-final networkServiceProvider = FutureProvider<DefaultNetworkService>((ref) {
+// Using the name from the design doc
+final networkProvider = FutureProvider<NetworkService>((ref) {
   return DefaultNetworkService.create();
 });
 
-// Provider for the reading service, which depends on the network service.
 final readingServiceProvider = Provider<ReadingService>((ref) {
-  // This will throw if the network service is not ready, which is not ideal.
-  // A better approach would be for the provider to handle the async state.
-  // But for now, let's assume it will be ready.
-  final net = ref.watch(networkServiceProvider).value;
+  final net = ref.watch(networkProvider).value;
   if (net == null) {
-    // This should not happen if we await the future elsewhere.
     throw Exception("NetworkService not initialized");
   }
   return ReadingService(net);
 });
 
-
-// Fetches the list of all readings for a given plant.
-final readingsProvider = FutureProvider.family<List<Reading>, Plant>((ref, plant) async {
-  // Wait for the network service to be ready.
-  final net = await ref.watch(networkServiceProvider.future);
-  // Create a service instance on the fly.
-  final readingService = ReadingService(net);
-
-  final result = await readingService.fetchReadings(plant);
-
+// 1) Fetches only the latest reading for a given plant.
+final latestReadingProvider = FutureProvider.family<Reading?, Plant>((ref, plant) async {
+  final readingService = ref.watch(readingServiceProvider);
+  final result = await readingService.fetchFromJson(plant.url);
   return switch (result) {
-    Ok(value: final readings) => readings,
+    Ok(value: final readings) => readings.isNotEmpty ? readings.last : null,
     Err(:final error) => throw error,
   };
 });
 
-// Fetches only the latest reading for a given plant.
-final latestReadingProvider = Provider.family<AsyncValue<Reading?>, Plant>((ref, plant) {
-  final readingsAsync = ref.watch(readingsProvider(plant));
+// 2) Fetches all readings for all plants.
+final allReadingsProvider = FutureProvider<Map<String, List<Reading>>>((ref) async {
+  final plants = ref.watch(plantsProvider);
+  final readingService = ref.watch(readingServiceProvider);
 
-  return readingsAsync.whenData((readings) {
-    if (readings.isEmpty) {
-      return null;
+  final allReadings = <String, List<Reading>>{};
+
+  // Fetch readings for all plants in parallel.
+  await Future.wait(plants.map((plant) async {
+    final result = await readingService.fetchFromJson(plant.url);
+    if (result.isOk) {
+      allReadings[plant.id] = (result as Ok<List<Reading>>).value;
+    } else {
+      // Handle or log the error for the specific plant
+      allReadings[plant.id] = [];
     }
-    readings.sort((a, b) => b.timestamp.compareTo(a.timestamp));
-    return readings.first;
-  });
+  }));
+
+  return allReadings;
 });

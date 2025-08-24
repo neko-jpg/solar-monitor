@@ -2,9 +2,10 @@ import 'package:dio/dio.dart';
 import 'package:cookie_jar/cookie_jar.dart';
 import 'package:dio_cookie_manager/dio_cookie_manager.dart';
 import '../storage/secure_cookie_store.dart';
-import '../../core/exceptions.dart'; // Will create this next
+import '../../core/exceptions.dart';
+import 'network_service.dart';
 
-class DefaultNetworkService {
+class DefaultNetworkService implements NetworkService {
   final Dio _dio;
   final CookieJar _jar;
   final SecureCookieStore _sec;
@@ -27,7 +28,7 @@ class DefaultNetworkService {
     return DefaultNetworkService._(dio, jar, sec);
   }
 
-  /// Performs a login request and persists the cookies upon success.
+  @override
   Future<void> login(Uri baseUrl, String username, String password) async {
     try {
       // Assume login endpoint is at the base URL path
@@ -38,32 +39,45 @@ class DefaultNetworkService {
       );
 
       if (response.statusCode != 200) {
-        throw AuthException('Login failed: Invalid status code ${response.statusCode}');
+        throw AppException(AppExceptionKind.auth, 'Login failed: Invalid status code ${response.statusCode}');
       }
 
       // Persist cookies on successful login
       await persistCookies(baseUrl);
     } on DioException catch (e) {
-      throw NetworkException.fromDioError(e);
+      throw _convertDioError(e);
     } catch (e) {
-      throw AppException('An unknown login error occurred: $e');
+      throw AppException(AppExceptionKind.unknown, 'An unknown login error occurred', e);
     }
   }
 
-  /// Makes a GET request, automatically handling cookie restoration.
-  Future<Response<T>> get<T>(Uri url) async {
+  @override
+  Future<Response<T>> getJson<T>(Uri url) async {
     try {
       await restoreCookies(url);
-      final response = await _dio.get<T>(url.toString());
+      final response = await _dio.get<T>(url.toString(), options: Options(responseType: ResponseType.json));
       return response;
     } on DioException catch (e) {
-      throw NetworkException.fromDioError(e);
+      throw _convertDioError(e);
     } catch (e) {
-      throw AppException('An unknown GET error occurred: $e');
+      throw AppException(AppExceptionKind.unknown, 'An unknown GET error occurred', e);
     }
   }
 
-  /// Saves cookies from the jar to secure storage for a given host.
+  @override
+  Future<Response<T>> getText<T>(Uri url) async {
+    try {
+      await restoreCookies(url);
+      final response = await _dio.get<T>(url.toString(), options: Options(responseType: ResponseType.plain));
+      return response;
+    } on DioException catch (e) {
+      throw _convertDioError(e);
+    } catch (e) {
+      throw AppException(AppExceptionKind.unknown, 'An unknown GET error occurred', e);
+    }
+  }
+
+  @override
   Future<void> persistCookies(Uri base) async {
     final cookies = await _jar.loadForRequest(base);
     if (cookies.isNotEmpty) {
@@ -73,11 +87,26 @@ class DefaultNetworkService {
   }
 
   /// Loads cookies from secure storage into the jar for a given host.
+  @override
   Future<void> restoreCookies(Uri base) async {
     final saved = await _sec.load(base.host);
     if (saved.isNotEmpty) {
       final cookies = saved.entries.map((e) => Cookie(e.key, e.value)).toList();
       await _jar.saveFromResponse(base, cookies);
     }
+  }
+
+  AppException _convertDioError(DioException e) {
+    return switch (e.type) {
+      DioExceptionType.connectionTimeout || DioExceptionType.sendTimeout || DioExceptionType.receiveTimeout
+        => AppException(AppExceptionKind.timeout, 'Connection timed out.'),
+      DioExceptionType.badResponse when e.response?.statusCode == 401
+        => AppException(AppExceptionKind.auth, 'Authentication failed.'),
+      DioExceptionType.badResponse
+        => AppException(AppExceptionKind.server, 'Server error: ${e.response?.statusCode}'),
+      DioExceptionType.connectionError
+        => AppException(AppExceptionKind.dns, 'Connection error. Check network or hostname.'),
+      _ => AppException(AppExceptionKind.unknown, 'An unknown network error occurred.', e),
+    };
   }
 }

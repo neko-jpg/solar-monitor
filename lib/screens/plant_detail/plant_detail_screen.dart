@@ -102,10 +102,11 @@ class _ChartTabView extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final readingsAsync = ref.watch(readingsProvider(plant));
+    final allReadingsAsync = ref.watch(allReadingsProvider);
 
-    return readingsAsync.when(
-      data: (readings) {
+    return allReadingsAsync.when(
+      data: (allReadings) {
+        final readings = allReadings[plant.id] ?? [];
         if (readings.isEmpty) {
           return const Center(child: Text('No data available for this plant.'));
         }
@@ -121,7 +122,7 @@ class _ChartTabView extends ConsumerWidget {
             Text('Failed to load chart data: $err'),
             const SizedBox(height: 16),
             ElevatedButton(
-              onPressed: () => ref.invalidate(readingsProvider(plant)),
+              onPressed: () => ref.invalidate(allReadingsProvider),
               child: const Text('Retry'),
             )
           ],
@@ -137,10 +138,11 @@ class _HistoryTabView extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final readingsAsync = ref.watch(readingsProvider(plant));
+    final allReadingsAsync = ref.watch(allReadingsProvider);
 
-    return readingsAsync.when(
-      data: (readings) {
+    return allReadingsAsync.when(
+      data: (allReadings) {
+        final readings = allReadings[plant.id] ?? [];
         if (readings.isEmpty) {
           return const Center(child: Text('No history available for this plant.'));
         }
@@ -154,7 +156,7 @@ class _HistoryTabView extends ConsumerWidget {
             Text('Failed to load history: $err'),
             const SizedBox(height: 16),
             ElevatedButton(
-              onPressed: () => ref.invalidate(readingsProvider(plant)),
+              onPressed: () => ref.invalidate(allReadingsProvider),
               child: const Text('Retry'),
             )
           ],

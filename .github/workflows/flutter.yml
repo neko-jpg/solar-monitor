@@ -1,0 +1,13 @@
+name: flutter
+on: [push, pull_request]
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with: { channel: 'stable' }
+      - run: flutter pub get
+      - run: flutter analyze
+      - run: flutter test --no-pub
+      - run: flutter build apk --release --no-tree-shake-icons

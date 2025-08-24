@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../models/reading.dart';
 import '../../../providers/plants_provider.dart';
-import '../../../providers/stats/all_readings_provider.dart';
+import '../../../providers/reading_provider.dart';
 
 class GenerationByPlantChart extends ConsumerWidget {
   const GenerationByPlantChart({super.key});
@@ -35,7 +35,7 @@ class GenerationByPlantChart extends ConsumerWidget {
                 BarChartRodData(
                   toY: kwh,
                   width: 16,
-                  color: plant.themeColor, // Corrected from plant.color
+                  color: Color(plant.color),
                   borderRadius: const BorderRadius.only(
                     topLeft: Radius.circular(4), topRight: Radius.circular(4),
                   ),
