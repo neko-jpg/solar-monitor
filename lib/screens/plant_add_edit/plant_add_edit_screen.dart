@@ -8,6 +8,7 @@ import '../../providers/reading_provider.dart';
 import '../../models/plant.dart';
 import '../../core/constants.dart';
 import '../../core/result.dart';
+import '../../services/reading/reading_service.dart';
 
 // Step widgets
 import 'widgets/step_url_input.dart';
@@ -42,7 +43,6 @@ class _PlantAddEditScreenState extends ConsumerState<PlantAddEditScreen> {
 
   bool get isEdit => widget.plantId != null;
 
-  // Flag to prevent re-initialization on rebuilds
   bool _initialized = false;
 
   @override
@@ -74,7 +74,6 @@ class _PlantAddEditScreenState extends ConsumerState<PlantAddEditScreen> {
 
   @override
   Widget build(BuildContext context) {
-    // Initialize fields here, it's safer with providers
     _initializeFields(ref);
 
     return GestureDetector(
@@ -145,7 +144,6 @@ class _PlantAddEditScreenState extends ConsumerState<PlantAddEditScreen> {
               title: const Text('Step 1'),
               subtitle: const Text('Enter plant URL'),
               isActive: step >= 0,
-              state: step > 0 ? StepState.complete : StepState.indexed,
               content: Form(
                 key: _formKey1,
                 child: StepUrlInput(
@@ -164,7 +162,6 @@ class _PlantAddEditScreenState extends ConsumerState<PlantAddEditScreen> {
               title: const Text('Step 2'),
               subtitle: const Text('Enter login information'),
               isActive: step >= 1,
-              state: step > 1 ? StepState.complete : StepState.indexed,
               content: Form(
                 key: _formKey2,
                 child: StepCredentials(
@@ -238,23 +235,29 @@ class _PlantAddEditScreenState extends ConsumerState<PlantAddEditScreen> {
       connMsg = null;
     });
 
-    // Create a temporary plant object to test the connection
     final tempPlant = Plant(
-      id: 'test',
-      name: 'test',
+      id: 'test', name: 'test',
       url: urlC.text.trim(),
       username: userC.text.trim(),
       password: passC.text,
-      themeColor: Colors.transparent,
-      icon: '',
+      themeColor: Colors.transparent, icon: '',
     );
 
-    // Use the new provider to fetch data
-    final result = await Result.guard(() => ref.read(readingsProvider(tempPlant).future));
+    // Get the network service and create a reading service instance
+    final net = await ref.read(networkServiceProvider.future);
+    final readingService = ReadingService(net);
+
+    // Use the new login method for the connection test
+    final result = await readingService.login(tempPlant);
+
+    if (!mounted) return;
 
     setState(() {
       conn = result.isOk ? _ConnState.ok : _ConnState.ng;
-      connMsg = result.isOk ? 'Connection OK!' : 'Connection failed. Check URL and credentials.';
+      connMsg = switch (result) {
+        Ok() => 'Login successful!',
+        Err(error: final e) => e.toString(),
+      };
       _toast(connMsg!);
     });
   }

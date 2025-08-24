@@ -7,6 +7,7 @@ import '../../models/plant.dart';
 import '../../providers/plants_provider.dart';
 import '../../providers/reading_provider.dart';
 import 'widgets/section_header.dart';
+import 'widgets/warning_card.dart';
 
 class DashboardScreen extends ConsumerWidget {
   const DashboardScreen({super.key});
@@ -22,6 +23,10 @@ class DashboardScreen extends ConsumerWidget {
           IconButton(
             icon: const Icon(Icons.add),
             onPressed: () => context.goNamed('add_plant'),
+          ),
+          IconButton(
+            icon: const Icon(Icons.settings_outlined),
+            onPressed: () => context.goNamed('notifications'),
           ),
         ],
       ),
@@ -42,16 +47,18 @@ class DashboardScreen extends ConsumerWidget {
             )
           : RefreshIndicator(
               onRefresh: () async {
-                // Invalidate the providers for all plants to trigger a refresh
+                ref.invalidate(plantsProvider);
+                // Also invalidate the readings for all plants
                 for (final plant in plants) {
                   ref.invalidate(readingsProvider(plant));
                 }
-                // Give it a moment to avoid visual glitch
                 return await Future.delayed(const Duration(seconds: 1));
               },
               child: ListView(
                 padding: const EdgeInsets.all(16),
                 children: [
+                  // The new Warning Card logic
+                  _DashboardAlerts(plants: plants),
                   const SectionHeader('My Plants'),
                   const SizedBox(height: 8),
                   ...plants.map((p) => _PlantCard(plant: p)),
@@ -61,6 +68,46 @@ class DashboardScreen extends ConsumerWidget {
     );
   }
 }
+
+class _DashboardAlerts extends ConsumerWidget {
+  const _DashboardAlerts({required this.plants});
+  final List<Plant> plants;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final List<String> errorPlants = [];
+    for (final plant in plants) {
+      // Watch each provider's state. hasError is the correct property.
+      final readingAsync = ref.watch(latestReadingProvider(plant));
+      if (readingAsync.hasError) {
+        errorPlants.add(plant.name);
+      }
+    }
+
+    if (errorPlants.isEmpty) {
+      // If no errors, return an empty container.
+      return const SizedBox.shrink();
+    }
+
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 16.0),
+      child: WarningCard(
+        title: 'Connection Issues Detected',
+        message: 'We could not fetch the latest data for the following plants. Please check their configuration or network status.',
+        problematicItems: errorPlants,
+        onRetry: () {
+          // Invalidate the providers for the plants that have errors.
+          for (final plant in plants) {
+            if (errorPlants.contains(plant.name)) {
+              ref.invalidate(readingsProvider(plant));
+            }
+          }
+        },
+      ),
+    );
+  }
+}
+
 
 class _PlantCard extends ConsumerWidget {
   const _PlantCard({required this.plant});
@@ -118,9 +165,15 @@ class _PlantCard extends ConsumerWidget {
                           Text('Loading...'),
                         ],
                       ),
-                      error: (err, stack) => Text(
-                        'Failed to load',
-                        style: TextStyle(color: Theme.of(context).colorScheme.error),
+                      error: (err, stack) => Row(
+                        children: [
+                          Icon(Icons.error_outline, color: Theme.of(context).colorScheme.error, size: 16),
+                          const SizedBox(width: 8),
+                          Text(
+                            'Failed to load',
+                            style: TextStyle(color: Theme.of(context).colorScheme.error),
+                          ),
+                        ],
                       ),
                     ),
                   ],

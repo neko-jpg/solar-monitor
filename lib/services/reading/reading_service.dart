@@ -1,3 +1,4 @@
+import '../../core/exceptions.dart';
 import '../../core/result.dart';
 import '../../models/plant.dart';
 import '../../models/reading.dart';
@@ -7,27 +8,32 @@ class ReadingService {
   final DefaultNetworkService _net;
   ReadingService(this._net);
 
+  /// Attempts to log in using the plant's credentials.
+  Future<Result<void>> login(Plant plant) async {
+    try {
+      final uri = Uri.parse(plant.url);
+      await _net.login(uri, plant.username, plant.password);
+      return const Ok(null); // Return Ok on success
+    } on AppException catch (e) {
+      return Err(e);
+    }
+  }
+
   /// Fetches a list of readings for a given plant.
-  /// It assumes that authentication (cookie setup) has been handled elsewhere.
+  /// It now uses the simpler `get` method from the network service.
   Future<Result<List<Reading>>> fetchReadings(Plant plant) async {
     try {
       final uri = Uri.parse(plant.url);
-      // Restore any saved cookies for this host
-      await _net.restoreCookies(uri);
+      final response = await _net.get<List<dynamic>>(uri);
 
-      // Make the request
-      final response = await _net.getJson<List<dynamic>>(uri);
-
-      // The API returns a list of JSON objects directly.
       final list = response.data?.cast<Map<String, dynamic>>() ?? [];
-
-      final readings = list.map((json) {
-        return Reading.fromJson(json);
-      }).toList();
+      final readings = list.map((json) => Reading.fromJson(json)).toList();
 
       return Ok(readings);
-    } catch (e) {
+    } on AppException catch (e) {
       return Err(e);
+    } catch (e) {
+      return Err(ParseException('Failed to parse readings data.'));
     }
   }
 }
