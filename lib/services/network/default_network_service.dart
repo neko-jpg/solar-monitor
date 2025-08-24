@@ -1,55 +1,39 @@
-// lib/services/network/default_network_service.dart（置換用）
-import 'dart:async';
-import 'dart:convert';
-import 'dart:io';
-import 'package:http/http.dart' as http;
+import 'package:dio/dio.dart';
+import 'package:cookie_jar/cookie_jar.dart';
+import 'package:dio_cookie_manager/dio_cookie_manager.dart';
+import '../storage/secure_cookie_store.dart';
 
-import 'network_service.dart';
+class DefaultNetworkService {
+  final Dio _dio; final CookieJar _jar; final SecureCookieStore _sec;
+  DefaultNetworkService._(this._dio, this._jar, this._sec);
 
-class DefaultNetworkService implements NetworkService {
-  DefaultNetworkService({Duration? timeout})
-    : _timeout = timeout ?? const Duration(seconds: 8);
+  static Future<DefaultNetworkService> create({Duration timeout = const Duration(seconds: 8)}) async {
+    final dio = Dio(BaseOptions(
+      connectTimeout: timeout,
+      receiveTimeout: timeout,
+      sendTimeout: timeout,
+      headers: {'User-Agent': 'SolarMonitor/1.0'},
+    ));
+    final jar = CookieJar();
+    final sec = SecureCookieStore();
+    dio.interceptors.add(CookieManager(jar));
+    return DefaultNetworkService._(dio, jar, sec);
+  }
 
-  final Duration _timeout;
+  Future<Response<T>> getJson<T>(Uri url) => _dio.get<T>(url.toString());
 
-  @override
-  Future<bool> testConnection({
-    required String url,
-    String? username,
-    String? password,
-  }) async {
-    // URL整形（スキーム補完）
-    Uri uri;
-    try {
-      uri = Uri.parse(url.trim());
-      if (!uri.hasScheme) {
-        uri = Uri.parse('https://$url');
-      }
-    } catch (_) {
-      return false;
-    }
+  /// 初回ログイン後のCookieを安全保存
+  Future<void> persistCookies(Uri base) async {
+    final cookies = await _jar.loadForRequest(base);
+    final map = { for (final c in cookies) c.name: c.value };
+    await _sec.save(base.host, map);
+  }
 
-    try {
-      final headers = <String, String>{'Accept': 'text/html,application/json'};
-      if ((username ?? '').isNotEmpty || (password ?? '').isNotEmpty) {
-        final auth = base64.encode(
-          utf8.encode('${username ?? ''}:${password ?? ''}'),
-        );
-        headers['Authorization'] = 'Basic $auth';
-      }
-
-      final res = await http.get(uri, headers: headers).timeout(_timeout);
-      return res.statusCode >= 200 && res.statusCode < 300;
-    } on HandshakeException {
-      // SSL
-      return false;
-    } on SocketException {
-      // DNS/接続不可
-      return false;
-    } on TimeoutException {
-      return false;
-    } catch (_) {
-      return false;
-    }
+  /// 2回目以降：保存Cookieを復元
+  Future<void> restoreCookies(Uri base) async {
+    final saved = await _sec.load(base.host);
+    if (saved.isEmpty) return;
+    final cookies = saved.entries.map((e) => Cookie(e.key, e.value)).toList();
+    await _jar.saveFromResponse(base, cookies);
   }
 }
